@@ -26,6 +26,16 @@ const buildM3U = (list = []) => {
   return lines.join('\n');
 };
 
+const clearAllPlaylists = () => {
+  const existing = db.listPlaylists();
+  existing.forEach((p) => db.deletePlaylistById(p.id));
+};
+
+const normalizeGroup = (value = '') => {
+  const stripped = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+  return stripped.toLowerCase();
+};
+
 const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -46,6 +56,7 @@ const AUTO_IMPORT_URL = process.env.AUTO_IMPORT_URL || '';
 const AUTO_IMPORT_GROUPS = process.env.AUTO_IMPORT_GROUPS || '';
 const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
 const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
+const AUTO_IMPORT_CLEAR = String(process.env.AUTO_IMPORT_CLEAR || '').toLowerCase() === 'true';
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
 
@@ -312,16 +323,18 @@ const importFromUrlAndSplit = async ({ url, groups, namePrefix, uploadedBy = nul
     : (typeof groups === 'string'
       ? groups.split(',').map((g) => g.trim()).filter(Boolean)
       : []);
+  const requestedGroupsNorm = requestedGroups.map((g) => normalizeGroup(g)).filter(Boolean);
 
   const groupMap = new Map();
   channels.forEach((ch) => {
-    const key = ch.group || 'Ungrouped';
-    if (!groupMap.has(key)) groupMap.set(key, []);
-    groupMap.get(key).push(ch);
+    const displayName = ch.group || 'Ungrouped';
+    const norm = normalizeGroup(displayName) || 'ungrouped';
+    if (!groupMap.has(norm)) groupMap.set(norm, { name: displayName, items: [] });
+    groupMap.get(norm).items.push(ch);
   });
 
-  const targetGroups = requestedGroups.length
-    ? requestedGroups
+  const targetGroups = requestedGroupsNorm.length
+    ? requestedGroupsNorm
     : Array.from(groupMap.keys());
 
   const created = [];
@@ -330,10 +343,10 @@ const importFromUrlAndSplit = async ({ url, groups, namePrefix, uploadedBy = nul
   const existing = db.listPlaylists(); // {id,name}
 
   targetGroups.forEach((g) => {
-    const subset = groupMap.get(g) || [];
-    if (!subset.length) return;
-    const playlistName = `${prefix ? `${prefix} · ` : ''}${g}`;
-    const m3uText = buildM3U(subset);
+    const bucket = groupMap.get(g);
+    if (!bucket || !bucket.items.length) return;
+    const playlistName = `${prefix ? `${prefix} · ` : ''}${bucket.name}`;
+    const m3uText = buildM3U(bucket.items);
 
     // Delete any playlist with the same name to avoid duplicates
     const dup = existing.find((p) => p.name === playlistName);
@@ -358,6 +371,11 @@ const scheduleAutoImport = () => {
   const ms = hours * 60 * 60 * 1000;
   const run = async () => {
     try {
+      if (AUTO_IMPORT_CLEAR) {
+        clearAllPlaylists();
+        // eslint-disable-next-line no-console
+        console.log('[auto-import] Cleared all existing playlists before import');
+      }
       const created = await importFromUrlAndSplit({
         url: AUTO_IMPORT_URL,
         groups: AUTO_IMPORT_GROUPS,
