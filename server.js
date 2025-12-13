@@ -28,6 +28,10 @@ const cookieSecure = process.env.SESSION_COOKIE_SECURE === 'true'
     : 'auto'; // secure when HTTPS, but allow HTTP for local/dev
 const dbPath = path.resolve(process.env.DB_PATH || path.join(__dirname, 'data', 'theatercat.db'));
 const trustProxy = process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 1;
+const AUTO_IMPORT_URL = process.env.AUTO_IMPORT_URL || '';
+const AUTO_IMPORT_GROUPS = process.env.AUTO_IMPORT_GROUPS || '';
+const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
+const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
 
@@ -246,11 +250,26 @@ app.post('/api/playlists', requireAdmin, upload.single('file'), (req, res) => {
 // Import playlist from remote URL and auto-split by group-title
 app.post('/api/admin/playlists/import-url', requireAdmin, async (req, res) => {
   const { url, groups, namePrefix } = req.body || {};
+  try {
+    const created = await importFromUrlAndSplit({
+      url,
+      groups,
+      namePrefix,
+      uploadedBy: req.session.user.id,
+    });
+    return res.json({ ok: true, imported: created.length, playlists: created });
+  } catch (err) {
+    const msg = err?.message || 'Import failed';
+    const isSize = msg.toLowerCase().includes('too large');
+    return res.status(isSize ? 413 : 400).json({ error: msg });
+  }
+});
+
+const importFromUrlAndSplit = async ({ url, groups, namePrefix, uploadedBy = null, maxBytes = 10 * 1024 * 1024 }) => {
   if (!url || !/^https?:\/\//i.test(url)) {
-    return res.status(400).json({ error: 'A valid http/https URL is required.' });
+    throw new Error('A valid http/https URL is required.');
   }
 
-  const maxBytes = 10 * 1024 * 1024; // 10MB safety cap
   let content = '';
   try {
     const controller = new AbortController();
@@ -258,20 +277,20 @@ app.post('/api/admin/playlists/import-url', requireAdmin, async (req, res) => {
     const upstream = await fetch(url, { signal: controller.signal });
     clearTimeout(timer);
     if (!upstream.ok) {
-      return res.status(400).json({ error: `Failed to fetch URL (${upstream.status})` });
+      throw new Error(`Failed to fetch URL (${upstream.status})`);
     }
     const buf = Buffer.from(await upstream.arrayBuffer());
     if (buf.length > maxBytes) {
-      return res.status(413).json({ error: 'Playlist too large (max 10MB).' });
+      throw new Error('Playlist too large (max 10MB).');
     }
     content = buf.toString('utf8');
   } catch (err) {
-    return res.status(400).json({ error: `Failed to fetch URL: ${err.message}` });
+    throw new Error(`Failed to fetch URL: ${err.message}`);
   }
 
   const channels = parseM3U(content);
   if (!channels.length) {
-    return res.status(400).json({ error: 'No channels found in playlist.' });
+    throw new Error('No channels found in playlist.');
   }
 
   const requestedGroups = Array.isArray(groups)
@@ -294,35 +313,53 @@ app.post('/api/admin/playlists/import-url', requireAdmin, async (req, res) => {
   const created = [];
   const prefix = (namePrefix || '').trim();
 
-  const buildM3U = (list) => {
-    const lines = ['#EXTM3U'];
-    list.forEach((ch) => {
-      const attrs = [
-        ch.tvgId ? `tvg-id="${ch.tvgId}"` : '',
-        ch.logo ? `tvg-logo="${ch.logo}"` : '',
-        ch.group ? `group-title="${ch.group}"` : '',
-      ].filter(Boolean).join(' ');
-      lines.push(`#EXTINF:-1 ${attrs},${ch.name}`);
-      lines.push(ch.url);
-    });
-    return lines.join('\n');
-  };
+  const existing = db.listPlaylists(); // {id,name}
 
   targetGroups.forEach((g) => {
     const subset = groupMap.get(g) || [];
     if (!subset.length) return;
     const playlistName = `${prefix ? `${prefix} · ` : ''}${g}`;
     const m3uText = buildM3U(subset);
-    const id = db.insertPlaylist(playlistName, m3uText, req.session.user.id);
+
+    // Delete any playlist with the same name to avoid duplicates
+    const dup = existing.find((p) => p.name === playlistName);
+    if (dup) {
+      db.deletePlaylistById(dup.id);
+    }
+
+    const id = db.insertPlaylist(playlistName, m3uText, uploadedBy);
     created.push({ id, name: playlistName, channels: subset.length });
   });
 
   if (!created.length) {
-    return res.status(404).json({ error: 'No matching groups found to import.' });
+    throw new Error('No matching groups found to import.');
   }
 
-  return res.json({ ok: true, imported: created.length, playlists: created });
-});
+  return created;
+};
+
+const scheduleAutoImport = () => {
+  if (!AUTO_IMPORT_URL) return;
+  const hours = Number.isFinite(AUTO_IMPORT_HOURS) && AUTO_IMPORT_HOURS > 0 ? AUTO_IMPORT_HOURS : 12;
+  const ms = hours * 60 * 60 * 1000;
+  const run = async () => {
+    try {
+      const created = await importFromUrlAndSplit({
+        url: AUTO_IMPORT_URL,
+        groups: AUTO_IMPORT_GROUPS,
+        namePrefix: AUTO_IMPORT_PREFIX,
+        uploadedBy: null,
+      });
+      // eslint-disable-next-line no-console
+      console.log(`[auto-import] Imported ${created.length} playlist(s) from URL`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[auto-import] Failed:', err.message);
+    }
+  };
+  run();
+  setInterval(run, ms).unref();
+};
 
 app.post('/api/playlists/:id/channels/description', requireAdmin, (req, res) => {
   return res.status(410).json({ error: 'Channel notes disabled in favor of EPG.' });
@@ -544,5 +581,6 @@ app.get('*', (_req, res) => {
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`theater.cat running on http://localhost:${PORT}`);
+  scheduleAutoImport();
 });
 
