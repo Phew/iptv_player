@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>theater.cat · Users</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/admin-users.js" defer></script>
+</head>
+<body>
+  <div class="gradient"></div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <div class="title">theater.cat</div>
+        <div class="subtitle">admin · users</div>
+      </div>
+    </div>
+    <div class="user-pill">
+      <a class="ghost-btn" href="/admin">Back to admin</a>
+      <button id="admin-logout" class="ghost-btn">Logout</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div class="admin-grid">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Users</p>
+            <h2>Directory</h2>
+            <p class="muted tiny">Search, filter, edit roles, reset passwords.</p>
+          </div>
+          <div class="channel-actions">
+            <input id="user-search" class="search" placeholder="Search users…">
+            <select id="user-role-filter" class="ghost-btn">
+              <option value="">All roles</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+        </div>
+        <div class="status" id="users-status"></div>
+        <div class="status" id="users-stats"></div>
+        <div id="users-list" class="list"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow accent">Create</p>
+            <h3>New user</h3>
+          </div>
+        </div>
+        <form id="user-form" class="stack">
+          <label class="field">
+            <span>Username</span>
+            <input id="user-username" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input id="user-password" type="password" required />
+          </label>
+          <label class="field">
+            <span>Role</span>
+            <select id="user-role">
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
+          <button class="primary" type="submit">Create user</button>
+        </form>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+

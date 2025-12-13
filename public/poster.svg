@@ -1,0 +1,15 @@
+<svg width="1200" height="675" viewBox="0 0 1200 675" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop stop-color="#7c5dff" offset="0%"/>
+      <stop stop-color="#6ae3ff" offset="100%"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="#0a0c14"/>
+  <circle cx="260" cy="220" r="240" fill="url(#g1)" opacity="0.28"/>
+  <circle cx="940" cy="180" r="260" fill="#6ae3ff" opacity="0.16"/>
+  <circle cx="700" cy="520" r="220" fill="#ff7fb0" opacity="0.12"/>
+  <text x="80" y="600" fill="#e9ecf4" font-family="Inter, sans-serif" font-size="46" font-weight="700">theater.cat</text>
+  <text x="82" y="644" fill="#9ea4b5" font-family="Inter, sans-serif" font-size="24">IPTV player</text>
+</svg>
+

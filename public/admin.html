@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>theater.cat · Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body>
+  <div class="gradient"></div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <div class="title">theater.cat</div>
+        <div class="subtitle">admin</div>
+      </div>
+    </div>
+    <div class="user-pill">
+      <span id="admin-name">Admin</span>
+      <a class="ghost-btn" href="/">Viewer</a>
+      <button id="admin-logout" class="ghost-btn">Logout</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div class="admin-grid">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow accent">Admin</p>
+            <h2>Playlists</h2>
+            <p class="muted">Delete uploads, see viewer counts and dates.</p>
+          </div>
+          <button id="admin-refresh" class="ghost-btn">Refresh</button>
+        </div>
+        <div class="status" id="admin-status"></div>
+        <div id="admin-playlists" class="list"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Upload</p>
+            <h3>.m3u playlist</h3>
+          </div>
+        </div>
+        <form id="admin-upload-form" class="stack" enctype="multipart/form-data">
+          <label class="field">
+            <span>Name (optional)</span>
+            <input name="name" placeholder="Lineup name">
+          </label>
+          <label class="field file">
+            <span>Playlist file</span>
+            <input id="admin-upload-file" type="file" name="file" accept=".m3u,.m3u8,text/plain" required>
+          </label>
+          <button type="submit" class="primary">Upload playlist</button>
+          <p class="tiny muted">Admin only. Max 5MB.</p>
+          <div class="status" id="admin-upload-status"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow accent">EPG</p>
+            <h3>Upload XMLTV</h3>
+            <p class="muted tiny">Use a fresh XMLTV file to power search and “now playing”.</p>
+          </div>
+        </div>
+        <form id="admin-epg-form" class="stack" enctype="multipart/form-data">
+          <label class="field file">
+            <span>EPG XML</span>
+            <input id="admin-epg-file" type="file" name="file" accept=".xml,.xmltv,text/xml" required>
+          </label>
+          <button type="submit" class="primary">Upload EPG</button>
+          <p class="tiny muted">Large files may take a few seconds.</p>
+          <div class="status" id="admin-epg-status"></div>
+        </form>
+      </section>
+
+    </div>
+  </main>
+</body>
+</html>
+
