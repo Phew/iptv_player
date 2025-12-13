@@ -170,17 +170,31 @@ document.addEventListener('DOMContentLoaded', () => {
   if (epgForm) {
     epgForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const form = new FormData(epgForm);
       setStatus(qs('admin-epg-status'), 'Uploading EPG…');
+      const url = qs('admin-epg-url').value.trim();
+      let res, data;
       try {
-        const res = await fetch('/api/admin/epg', {
-          method: 'POST',
-          body: form,
-          credentials: 'same-origin',
-        });
-        const data = await res.json().catch(() => ({}));
+        if (url) {
+          // Send URL for backend fetch
+          res = await fetch('/api/admin/epg', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+            credentials: 'include',
+          });
+        } else {
+          // Fallback to file upload
+          const form = new FormData(epgForm);
+          res = await fetch('/api/admin/epg', {
+            method: 'POST',
+            body: form,
+            credentials: 'include',
+          });
+        }
+        data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'EPG upload failed');
         setStatus(qs('admin-epg-status'), `EPG loaded (${data.programs} programs)`);
+        epgForm.reset();
       } catch (err) {
         setStatus(qs('admin-epg-status'), err.message, true);
       }

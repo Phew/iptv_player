@@ -380,11 +380,23 @@ app.get('/api/activity/list', requireAdmin, (_req, res) => {
 
 // Admin EPG upload (XMLTV)
 app.post('/api/admin/epg', requireAdmin, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'Upload an EPG XML file.' });
+  // Accept either file upload or url (NOT both at once)
+  let xml = '';
+  if (req.file) {
+    xml = req.file.buffer.toString('utf8');
+  } else if (req.body.url) {
+    try {
+      const response = await fetch(req.body.url, { timeout: 15000 });
+      if (!response.ok) throw new Error(`Failed to fetch URL: ${response.statusText}`);
+      xml = await response.text();
+    } catch (err) {
+      return res.status(400).json({ error: `Failed to fetch remote EPG: ${err.message}` });
+    }
+  } else {
+    return res.status(400).json({ error: 'Upload a file or provide a URL.' });
   }
+
   try {
-    const xml = req.file.buffer.toString('utf8');
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '',
@@ -405,7 +417,6 @@ app.post('/api/admin/epg', requireAdmin, upload.single('file'), async (req, res)
         end_ts: Number.isFinite(stop) ? stop : start + 30 * 60 * 1000,
       };
     }).filter((e) => e.tvg_id && e.start_ts && e.end_ts);
-
     db.replaceEpg('default', entries);
     res.json({ ok: true, programs: entries.length });
   } catch (err) {

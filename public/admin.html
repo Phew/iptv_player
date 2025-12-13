@@ -74,12 +74,16 @@
           </div>
         </div>
         <form id="admin-epg-form" class="stack" method="post" enctype="multipart/form-data">
+          <label class="field">
+            <span>EPG URL (alternative to file)</span>
+            <input id="admin-epg-url" name="url" type="url" placeholder="https://example.com/tv.xml">
+          </label>
           <label class="field file">
             <span>EPG XML</span>
-            <input id="admin-epg-file" type="file" name="file" accept=".xml,.xmltv,text/xml" required>
+            <input id="admin-epg-file" type="file" name="file" accept=".xml,.xmltv,text/xml" />
           </label>
           <button type="submit" class="primary">Upload EPG</button>
-          <p class="tiny muted">Large files may take a few seconds.</p>
+          <p class="tiny muted">Paste a link or upload a file. Large files may take a few seconds.</p>
           <div class="status" id="admin-epg-status"></div>
         </form>
       </section>
