@@ -243,6 +243,87 @@ app.post('/api/playlists', requireAdmin, upload.single('file'), (req, res) => {
   res.status(201).json({ id, name: friendlyName, channels: channels.length });
 });
 
+// Import playlist from remote URL and auto-split by group-title
+app.post('/api/admin/playlists/import-url', requireAdmin, async (req, res) => {
+  const { url, groups, namePrefix } = req.body || {};
+  if (!url || !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'A valid http/https URL is required.' });
+  }
+
+  const maxBytes = 10 * 1024 * 1024; // 10MB safety cap
+  let content = '';
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const upstream = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!upstream.ok) {
+      return res.status(400).json({ error: `Failed to fetch URL (${upstream.status})` });
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (buf.length > maxBytes) {
+      return res.status(413).json({ error: 'Playlist too large (max 10MB).' });
+    }
+    content = buf.toString('utf8');
+  } catch (err) {
+    return res.status(400).json({ error: `Failed to fetch URL: ${err.message}` });
+  }
+
+  const channels = parseM3U(content);
+  if (!channels.length) {
+    return res.status(400).json({ error: 'No channels found in playlist.' });
+  }
+
+  const requestedGroups = Array.isArray(groups)
+    ? groups
+    : (typeof groups === 'string'
+      ? groups.split(',').map((g) => g.trim()).filter(Boolean)
+      : []);
+
+  const groupMap = new Map();
+  channels.forEach((ch) => {
+    const key = ch.group || 'Ungrouped';
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key).push(ch);
+  });
+
+  const targetGroups = requestedGroups.length
+    ? requestedGroups
+    : Array.from(groupMap.keys());
+
+  const created = [];
+  const prefix = (namePrefix || '').trim();
+
+  const buildM3U = (list) => {
+    const lines = ['#EXTM3U'];
+    list.forEach((ch) => {
+      const attrs = [
+        ch.tvgId ? `tvg-id="${ch.tvgId}"` : '',
+        ch.logo ? `tvg-logo="${ch.logo}"` : '',
+        ch.group ? `group-title="${ch.group}"` : '',
+      ].filter(Boolean).join(' ');
+      lines.push(`#EXTINF:-1 ${attrs},${ch.name}`);
+      lines.push(ch.url);
+    });
+    return lines.join('\n');
+  };
+
+  targetGroups.forEach((g) => {
+    const subset = groupMap.get(g) || [];
+    if (!subset.length) return;
+    const playlistName = `${prefix ? `${prefix} · ` : ''}${g}`;
+    const m3uText = buildM3U(subset);
+    const id = db.insertPlaylist(playlistName, m3uText, req.session.user.id);
+    created.push({ id, name: playlistName, channels: subset.length });
+  });
+
+  if (!created.length) {
+    return res.status(404).json({ error: 'No matching groups found to import.' });
+  }
+
+  return res.json({ ok: true, imported: created.length, playlists: created });
+});
+
 app.post('/api/playlists/:id/channels/description', requireAdmin, (req, res) => {
   return res.status(410).json({ error: 'Channel notes disabled in favor of EPG.' });
 });

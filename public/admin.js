@@ -159,9 +159,37 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!res.ok) throw new Error(data.error || 'Upload failed');
         setStatus(qs('admin-upload-status'), `Uploaded ${data.name} (${data.channels} channels)`);
         uploadForm.reset();
-        await loadData();
+        await loadAll();
       } catch (err) {
         setStatus(qs('admin-upload-status'), err.message, true);
+      }
+    });
+  }
+
+  const importForm = qs('admin-import-url-form');
+  if (importForm) {
+    importForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setStatus(qs('admin-import-status'), 'Importing…');
+      const payload = {
+        url: qs('import-url')?.value.trim(),
+        groups: qs('import-groups')?.value || '',
+        namePrefix: qs('import-prefix')?.value || '',
+      };
+      if (!payload.url) {
+        setStatus(qs('admin-import-status'), 'URL is required', true);
+        return;
+      }
+      try {
+        const res = await fetchJson('/api/admin/playlists/import-url', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setStatus(qs('admin-import-status'), `Imported ${res.imported} playlists`);
+        importForm.reset();
+        await loadAll();
+      } catch (err) {
+        setStatus(qs('admin-import-status'), err.message, true);
       }
     });
   }
@@ -232,7 +260,7 @@ const deleteUser = async (id) => {
   setStatus(qs('user-status'), 'Deleting user…');
   try {
     await fetchJson(`/api/admin/users/${id}`, { method: 'DELETE' });
-    await loadData();
+    await loadAll();
     setStatus(qs('user-status'), 'Deleted');
   } catch (err) {
     setStatus(qs('user-status'), err.message, true);

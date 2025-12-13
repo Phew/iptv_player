@@ -68,6 +68,33 @@
       <section class="card">
         <div class="card-head">
           <div>
+            <p class="eyebrow accent">Import</p>
+            <h3>Playlist from URL</h3>
+            <p class="muted tiny">Fetch a remote .m3u and auto-split by group-title.</p>
+          </div>
+        </div>
+        <form id="admin-import-url-form" class="stack">
+          <label class="field">
+            <span>Playlist URL</span>
+            <input id="import-url" name="url" type="url" placeholder="https://example.com/playlist.m3u" required>
+          </label>
+          <label class="field">
+            <span>Groups to import (comma-separated, optional)</span>
+            <input id="import-groups" name="groups" type="text" placeholder="Sports, Movies, Kids">
+          </label>
+          <label class="field">
+            <span>Name prefix (optional)</span>
+            <input id="import-prefix" name="prefix" type="text" placeholder="My Lineup">
+          </label>
+          <button type="submit" class="primary">Import & Split</button>
+          <p class="tiny muted">Imports by group-title; leave groups empty to import all groups as separate playlists. Max 10MB.</p>
+          <div class="status" id="admin-import-status"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
             <p class="eyebrow accent">EPG</p>
             <h3>Upload XMLTV</h3>
             <p class="muted tiny">Use a fresh XMLTV file to power search and “now playing”.</p>
