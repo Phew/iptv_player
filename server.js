@@ -15,7 +15,7 @@ const { parseM3U } = require('./src/m3uParser');
 const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB cap
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB cap
 });
 
 const PORT = process.env.PORT || 3000;
@@ -411,6 +411,24 @@ app.post('/api/admin/epg', requireAdmin, upload.single('file'), async (req, res)
   } catch (err) {
     res.status(400).json({ error: 'Failed to parse EPG XML.' });
   }
+});
+
+// Centralized error handler for multer and other errors
+// Keep JSON errors so the frontend can show meaningful messages.
+// Must be after routes.
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  if (err instanceof multer.MulterError) {
+    const map = {
+      LIMIT_FILE_SIZE: 'Upload too large. Max 20MB.',
+      LIMIT_UNEXPECTED_FILE: 'Unexpected file upload.',
+    };
+    const msg = map[err.code] || 'Upload failed.';
+    return res.status(400).json({ error: msg });
+  }
+  // Fallback
+  console.error('Unhandled error:', err); // keep minimal logging
+  return res.status(500).json({ error: 'Server error.' });
 });
 
 // Serve static UI

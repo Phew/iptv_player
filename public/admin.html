@@ -22,6 +22,7 @@
     </div>
     <div class="user-pill">
       <span id="admin-name">Admin</span>
+      <span id="admin-role" class="muted tiny"></span>
       <a class="ghost-btn" href="/">Viewer</a>
       <button id="admin-logout" class="ghost-btn">Logout</button>
     </div>
@@ -49,7 +50,7 @@
             <h3>.m3u playlist</h3>
           </div>
         </div>
-        <form id="admin-upload-form" class="stack" enctype="multipart/form-data">
+        <form id="admin-upload-form" class="stack" method="post" enctype="multipart/form-data">
           <label class="field">
             <span>Name (optional)</span>
             <input name="name" placeholder="Lineup name">
@@ -59,7 +60,7 @@
             <input id="admin-upload-file" type="file" name="file" accept=".m3u,.m3u8,text/plain" required>
           </label>
           <button type="submit" class="primary">Upload playlist</button>
-          <p class="tiny muted">Admin only. Max 5MB.</p>
+          <p class="tiny muted">Admin only. Max 20MB.</p>
           <div class="status" id="admin-upload-status"></div>
         </form>
       </section>
@@ -72,7 +73,7 @@
             <p class="muted tiny">Use a fresh XMLTV file to power search and “now playing”.</p>
           </div>
         </div>
-        <form id="admin-epg-form" class="stack" enctype="multipart/form-data">
+        <form id="admin-epg-form" class="stack" method="post" enctype="multipart/form-data">
           <label class="field file">
             <span>EPG XML</span>
             <input id="admin-epg-file" type="file" name="file" accept=".xml,.xmltv,text/xml" required>
