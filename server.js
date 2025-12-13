@@ -12,6 +12,20 @@ const db = require('./src/db');
 const { requireAuth, requireAdmin, sanitizeUser, verifyCredentials } = require('./src/auth');
 const { parseM3U } = require('./src/m3uParser');
 
+const buildM3U = (list = []) => {
+  const lines = ['#EXTM3U'];
+  list.forEach((ch) => {
+    const attrs = [
+      ch.tvgId ? `tvg-id="${ch.tvgId}"` : '',
+      ch.logo ? `tvg-logo="${ch.logo}"` : '',
+      ch.group ? `group-title="${ch.group}"` : '',
+    ].filter(Boolean).join(' ');
+    lines.push(`#EXTINF:-1 ${attrs},${ch.name}`);
+    lines.push(ch.url);
+  });
+  return lines.join('\n');
+};
+
 const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
