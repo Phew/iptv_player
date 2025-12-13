@@ -57,6 +57,7 @@ const AUTO_IMPORT_GROUPS = process.env.AUTO_IMPORT_GROUPS || '';
 const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
 const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
 const AUTO_IMPORT_CLEAR = String(process.env.AUTO_IMPORT_CLEAR || '').toLowerCase() === 'true';
+const SITE_NAME = process.env.SITE_NAME || db.getSetting('siteName') || 'theater.cat';
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
 
@@ -111,6 +112,20 @@ setInterval(cleanupWatchers, 15_000);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'theater.cat' });
+});
+
+app.get('/api/settings', (_req, res) => {
+  const siteName = db.getSetting('siteName') || SITE_NAME || 'theater.cat';
+  res.json({ siteName });
+});
+
+app.post('/api/admin/settings', requireAdmin, (req, res) => {
+  const { siteName } = req.body || {};
+  const name = (siteName || '').trim();
+  if (!name) return res.status(400).json({ error: 'siteName required' });
+  if (name.length > 80) return res.status(400).json({ error: 'siteName too long' });
+  db.setSetting('siteName', name);
+  return res.json({ ok: true, siteName: name });
 });
 
 // Simple proxy to bypass CORS/mixed UA issues for streams
@@ -394,6 +409,8 @@ const scheduleAutoImport = () => {
       });
       // eslint-disable-next-line no-console
       console.log(`[auto-import] Imported ${created.length} playlist(s) from URL`);
+      // Persist site name env override if provided
+      if (process.env.SITE_NAME) db.setSetting('siteName', process.env.SITE_NAME);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[auto-import] Failed:', err.message);
