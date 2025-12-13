@@ -355,7 +355,7 @@ const importFromUrlAndSplit = async ({ url, groups, namePrefix, uploadedBy = nul
     }
 
     const id = db.insertPlaylist(playlistName, m3uText, uploadedBy);
-    created.push({ id, name: playlistName, channels: subset.length });
+    created.push({ id, name: playlistName, channels: bucket.items.length });
   });
 
   if (!created.length) {
