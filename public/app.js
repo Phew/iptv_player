@@ -8,6 +8,7 @@ const state = {
   watchTimer: null,
   viewerTotal: 0,
   isLive: true,
+  siteName: 'theater.cat',
 };
 
 const els = {};
@@ -120,6 +121,14 @@ const updateUserUI = () => {
   const onUsers = window.location.pathname.startsWith('/users');
   toggle(qs('admin-link'), user?.role === 'admin' && !onAdmin);
   toggle(qs('users-link'), user?.role === 'admin' && !onUsers);
+};
+
+const applySiteName = (name) => {
+  if (!name) return;
+  state.siteName = name;
+  const titleEl = qs('site-title');
+  if (titleEl) titleEl.textContent = name;
+  document.title = `${name} · IPTV`;
 };
 
 const updateViewerBadge = () => {
@@ -456,6 +465,12 @@ const loadPlaylists = async () => {
 };
 
 const refreshSession = async () => {
+  try {
+    const settings = await fetchJson('/api/settings');
+    if (settings?.siteName) applySiteName(settings.siteName);
+  } catch (_e) {
+    // ignore
+  }
   // optimistic: use cached user to avoid flash logout on refresh
   const cached = sessionStorage.getItem('user');
   if (cached && !state.user) {

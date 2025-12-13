@@ -4,6 +4,7 @@ const state = {
   role: '',
   stats: { total: 0, limit: 0 },
   sessions: [],
+  siteName: 'theater.cat',
 };
 
 const qs = (id) => document.getElementById(id);
@@ -29,6 +30,16 @@ const setStatus = (el, message, isError = false) => {
   if (!el) return;
   el.textContent = message || '';
   el.style.color = isError ? '#ff9fbf' : 'var(--accent)';
+};
+
+const applySiteName = (name) => {
+  if (!name) return;
+  state.siteName = name;
+  const titleEl = qs('site-title');
+  if (titleEl) titleEl.textContent = name;
+  const pageTitle = qs('site-page-title');
+  if (pageTitle) pageTitle.textContent = `${name} · Users`;
+  document.title = `${name} · Users`;
 };
 
 const ensureAdmin = async () => {
@@ -154,7 +165,15 @@ const deleteUser = async (id) => {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  ensureAdmin().then(loadUsers);
+  ensureAdmin().then(async () => {
+    try {
+      const settings = await fetchJson('/api/settings');
+      if (settings?.siteName) applySiteName(settings.siteName);
+    } catch (_e) {
+      // ignore
+    }
+    await loadUsers();
+  });
 
   qs('admin-logout').addEventListener('click', async () => {
     await fetchJson('/api/auth/logout', { method: 'POST' }).catch(() => {});

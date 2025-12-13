@@ -39,6 +39,11 @@ connection.exec(`
     UNIQUE (source, tvg_id, start_ts)
   );
   CREATE INDEX IF NOT EXISTS epg_programs_idx ON epg_programs(tvg_id, start_ts);
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
 `);
 
 const createUser = (username, password, role = 'viewer') => {
@@ -139,6 +144,24 @@ const getEpgByTvgIds = (tvgIds = [], nowTs) => {
   return map;
 };
 
+const getSetting = (key, fallback = null) => {
+  const row = connection.prepare(`SELECT value FROM settings WHERE key = ?`).get(key);
+  return row ? row.value : fallback;
+};
+
+const setSetting = (key, value) => {
+  connection.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, value);
+};
+
+const ensureDefaultSettings = () => {
+  if (!getSetting('siteName')) {
+    setSetting('siteName', 'theater.cat');
+  }
+};
+
 const ensureAdminSeed = () => {
   const hasAdmin = connection.prepare(`SELECT 1 FROM users WHERE role = 'admin' LIMIT 1`).get();
   if (hasAdmin) return;
@@ -151,6 +174,7 @@ const ensureAdminSeed = () => {
 };
 
 ensureAdminSeed();
+ensureDefaultSettings();
 
 module.exports = {
   connection,
@@ -168,5 +192,7 @@ module.exports = {
   countAdmins,
   replaceEpg,
   getEpgByTvgIds,
+  getSetting,
+  setSetting,
 };
 

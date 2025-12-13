@@ -2,6 +2,7 @@ const state = {
   playlists: [],
   stats: { counts: {}, total: 0, limit: 4 },
   users: [],
+  siteName: 'theater.cat',
 };
 
 const qs = (id) => document.getElementById(id);
@@ -28,6 +29,18 @@ const setStatus = (el, message, isError = false) => {
   if (!el) return;
   el.textContent = message || '';
   el.style.color = isError ? '#ff9fbf' : 'var(--accent)';
+};
+
+const applySiteName = (name) => {
+  if (!name) return;
+  state.siteName = name;
+  const titleEl = qs('site-title');
+  if (titleEl) titleEl.textContent = name;
+  const pageTitle = qs('site-page-title');
+  if (pageTitle) pageTitle.textContent = `${name} · Admin`;
+  document.title = `${name} · Admin`;
+  const siteInput = qs('site-name-input');
+  if (siteInput && !siteInput.value) siteInput.value = name;
 };
 
 const ensureAdmin = async () => {
@@ -108,7 +121,15 @@ const deletePlaylist = async (id) => {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  ensureAdmin().then(loadAll);
+  ensureAdmin().then(async () => {
+    try {
+      const settings = await fetchJson('/api/settings');
+      if (settings?.siteName) applySiteName(settings.siteName);
+    } catch (_e) {
+      // ignore
+    }
+    await loadAll();
+  });
   qs('admin-refresh').addEventListener('click', loadAll);
   qs('admin-logout').addEventListener('click', async () => {
     await fetchJson('/api/auth/logout', { method: 'POST' }).catch(() => {});
@@ -162,6 +183,28 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadAll();
       } catch (err) {
         setStatus(qs('admin-upload-status'), err.message, true);
+      }
+    });
+  }
+
+  const settingsForm = qs('admin-settings-form');
+  if (settingsForm) {
+    settingsForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const siteName = qs('site-name-input')?.value.trim();
+      if (!siteName) {
+        setStatus(qs('admin-settings-status'), 'Site name required', true);
+        return;
+      }
+      try {
+        const res = await fetchJson('/api/admin/settings', {
+          method: 'POST',
+          body: JSON.stringify({ siteName }),
+        });
+        applySiteName(res.siteName);
+        setStatus(qs('admin-settings-status'), 'Saved');
+      } catch (err) {
+        setStatus(qs('admin-settings-status'), err.message, true);
       }
     });
   }

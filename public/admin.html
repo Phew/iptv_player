@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>theater.cat · Admin</title>
+  <title id="site-page-title">· Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
     <div class="brand">
       <div class="dot"></div>
       <div>
-        <div class="title">theater.cat</div>
+        <div class="title" id="site-title"></div>
         <div class="subtitle">admin</div>
       </div>
     </div>
@@ -89,6 +89,24 @@
           <button type="submit" class="primary">Import & Split</button>
           <p class="tiny muted">Imports by group-title; leave groups empty to import all groups as separate playlists. Max 10MB.</p>
           <div class="status" id="admin-import-status"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow accent">Branding</p>
+            <h3>Site name</h3>
+            <p class="muted tiny">Update the site name shown in the UI.</p>
+          </div>
+        </div>
+        <form id="admin-settings-form" class="stack">
+          <label class="field">
+            <span>Site name</span>
+            <input id="site-name-input" name="siteName" type="text" maxlength="80" placeholder="theater.cat">
+          </label>
+          <button type="submit" class="primary">Save</button>
+          <div class="status" id="admin-settings-status"></div>
         </form>
       </section>
 
