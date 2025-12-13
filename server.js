@@ -343,7 +343,17 @@ const importFromUrlAndSplit = async ({ url, groups, namePrefix, uploadedBy = nul
   const existing = db.listPlaylists(); // {id,name}
 
   targetGroups.forEach((g) => {
-    const bucket = groupMap.get(g);
+    let bucket = groupMap.get(g);
+    if (!bucket) {
+      // Fallback: partial match on normalized key or display name
+      for (const [key, val] of groupMap.entries()) {
+        const nameLc = (val.name || '').toLowerCase();
+        if (key.includes(g) || nameLc.includes(g)) {
+          bucket = val;
+          break;
+        }
+      }
+    }
     if (!bucket || !bucket.items.length) return;
     const playlistName = `${prefix ? `${prefix} · ` : ''}${bucket.name}`;
     const m3uText = buildM3U(bucket.items);
