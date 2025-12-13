@@ -1,0 +1,22 @@
+node_modules/
+
+# Local env and secrets
+.env
+.env.*
+!sample.env
+
+# Local SQLite data
+data/*.db
+data/*.db-*
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite
+data/*.sqlite-*
+
+# Temp artifacts
+tmpcookies.txt
+npm-debug.log*
+yarn-error.log*
+*.log
+.DS_Store
+
