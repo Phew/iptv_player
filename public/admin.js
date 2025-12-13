@@ -101,7 +101,7 @@ const deletePlaylist = async (id) => {
   setStatus(qs('admin-status'), 'Deleting…');
   try {
     await fetchJson(`/api/playlists/${id}`, { method: 'DELETE' });
-    await loadData();
+    await loadAll();
   } catch (err) {
     setStatus(qs('admin-status'), err.message, true);
   }
@@ -115,30 +115,33 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = '/';
   });
 
-  qs('user-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const payload = {
-      username: qs('user-username').value.trim(),
-      password: qs('user-password').value,
-      role: qs('user-role').value,
-    };
-    if (!payload.username || !payload.password) {
-      setStatus(qs('user-status'), 'Username and password required', true);
-      return;
-    }
-    setStatus(qs('user-status'), 'Creating user…');
-    try {
-      await fetchJson('/api/admin/users', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      qs('user-form').reset();
-      await loadData();
-      setStatus(qs('user-status'), 'User created');
-    } catch (err) {
-      setStatus(qs('user-status'), err.message, true);
-    }
-  });
+  const userForm = qs('user-form');
+  if (userForm) {
+    userForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        username: qs('user-username').value.trim(),
+        password: qs('user-password').value,
+        role: qs('user-role').value,
+      };
+      if (!payload.username || !payload.password) {
+        setStatus(qs('user-status'), 'Username and password required', true);
+        return;
+      }
+      setStatus(qs('user-status'), 'Creating user…');
+      try {
+        await fetchJson('/api/admin/users', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        userForm.reset();
+        await loadAll();
+        setStatus(qs('user-status'), 'User created');
+      } catch (err) {
+        setStatus(qs('user-status'), err.message, true);
+      }
+    });
+  }
 
   const uploadForm = qs('admin-upload-form');
   if (uploadForm) {
