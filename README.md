@@ -3,17 +3,20 @@
 Lightweight, mobile-first IPTV with auth, admin uploads/imports, EPG ingest, auto-import scheduling, and basic branding. Express + SQLite (better-sqlite3) + vanilla JS + hls.js.
 
 ## What it does
-- Auth & sessions (SQLite-backed) with admin/viewer roles.
+- Auth & sessions (SQLite-backed) with admin/viewer roles; HttpOnly cookies, same-site by default, secure behind HTTPS.
+- Jellyfin integration:
+  - “Log in with Jellyfin” on the sign-in page (uses `JELLYFIN_SERVER_URL`).
+  - Admin “Import from Jellyfin” button (requires `JELLYFIN_API_KEY`) to sync users; admins stay admins; disabled users are skipped.
 - Admin panels:
   - Upload .m3u/.m3u8 (20MB cap).
-  - Import from URL and auto-split by `group-title`; optional wipe before import.
-  - Optional scheduled auto-import (default every 12h).
+  - Import from URL and auto-split by `group-title`; optional wipe before import; scheduled auto-import (default every 12h).
   - Manage users (create/update role/reset password/delete).
   - Upload EPG (file or URL).
   - Branding: set site name from the admin UI.
 - Viewer app:
   - Playlist/channel browsing with search, HLS playback (hls.js fallback), live/seek UI.
-  - Presence + connection limits; activity/watch stats (admin endpoints).
+  - Presence + connection limits (MAX_CONNECTIONS); activity/watch stats (admin endpoints).
+- Stream proxy to avoid CORS/mixed-content issues; HLS manifests rewritten to proxied segment URLs.
 - Mobile-friendly styling.
 
 ## Quick start
@@ -41,6 +44,12 @@ AUTO_IMPORT_GROUPS=                # comma-separated; empty=all groups
 AUTO_IMPORT_PREFIX=
 AUTO_IMPORT_HOURS=12
 AUTO_IMPORT_CLEAR=false            # true = wipe playlists before import
+
+# Jellyfin (auth + user import)
+JELLYFIN_SERVER_URL=https://theater.cat
+JELLYFIN_API_KEY=                  # required for import; admin key from Jellyfin
+JELLYFIN_DEVICE_ID=tv.theater.cat  # optional override
+JELLYFIN_TIMEOUT_MS=8000           # optional
 ```
 First run seeds an admin user if none exists.
 
@@ -72,6 +81,17 @@ npm start
 - User import requires a Jellyfin admin API key: set `JELLYFIN_API_KEY=<token>` to enable `/api/admin/users/import-jellyfin` (button in Users admin page).
 - Sign-in page includes a **Log in with Jellyfin** button; credentials post to the server, sessions stay HttpOnly with same-site cookies (`SESSION_COOKIE_SECURE=true` in prod + `TRUST_PROXY` for your proxy hops).
 - Disabled Jellyfin users are skipped; admins stay admins.
+- Troubleshooting import: if you see “Jellyfin import is not configured (missing API key)”, ensure `.env` lives in the same working directory you start `node server.js` from, contains `JELLYFIN_API_KEY`, and restart the server. Quick check:  
+  `node -e "require('dotenv').config(); console.log(process.env.JELLYFIN_API_KEY ? 'api key loaded' : 'missing api key')"` should print “api key loaded”.
+
+## How it works
+- Auth/session: `express-session` + SQLite store; roles are admin/viewer. Cookies are HttpOnly + same-site; set `SESSION_COOKIE_SECURE=true` and `TRUST_PROXY` for HTTPS/proxy.
+- Local login checks SQLite credentials; Jellyfin login posts to `/api/auth/login/jellyfin`, calls Jellyfin `/Users/AuthenticateByName`, then mirrors user locally (admins stay admins).
+- Jellyfin import (`/api/admin/users/import-jellyfin`) requires `JELLYFIN_API_KEY` and syncs non-disabled users; admin policy preserved.
+- Playlists are stored as raw M3U in SQLite; `/api/playlists` lists them with live connection counts; `/api/playlists/:id/channels` parses M3U and enriches with EPG by `tvg-id`.
+- Streaming uses `/api/proxy` to fetch/pipe media and rewrites HLS manifests so all segments go back through the proxy (handles CORS and referer/origin quirks).
+- Presence/limits: clients ping `/api/watch/ping`; server tracks watchers per session and enforces `MAX_CONNECTIONS`; activity pings keep sessions fresh.
+- EPG: XMLTV ingested via admin upload/URL, stored in SQLite, matched by `tvg-id` for “now playing” metadata.
 
 ## Notes
 - Playlists are snapshots; auto-import can re-fetch on a schedule if configured.
