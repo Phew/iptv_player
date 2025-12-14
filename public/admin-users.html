@@ -52,6 +52,19 @@
       <section class="card">
         <div class="card-head">
           <div>
+            <p class="eyebrow accent">Jellyfin</p>
+            <h3>Sync users</h3>
+            <p class="muted tiny">Import Jellyfin accounts from https://theater.cat.</p>
+          </div>
+          <button class="ghost-btn" id="import-jellyfin-btn" type="button">Import from Jellyfin</button>
+        </div>
+        <p class="tiny muted">Requires a Jellyfin admin API key configured on the server.</p>
+        <div class="status" id="import-status"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
             <p class="eyebrow accent">Create</p>
             <h3>New user</h3>
           </div>

@@ -125,6 +125,18 @@ const loadUsers = async () => {
   }
 };
 
+const importJellyfinUsers = async () => {
+  setStatus(qs('import-status'), 'Importing Jellyfin users…');
+  try {
+    const result = await fetchJson('/api/admin/users/import-jellyfin', { method: 'POST' });
+    const message = `Imported ${result.created || 0} new, ${result.updated || 0} updated, ${result.skipped || 0} skipped`;
+    setStatus(qs('import-status'), message);
+    await loadUsers();
+  } catch (err) {
+    setStatus(qs('import-status'), err.message, true);
+  }
+};
+
 const saveUser = async (id) => {
   const roleSel = document.querySelector(`select.user-role[data-id="${id}"]`);
   const passInput = document.querySelector(`input.user-pass[data-id="${id}"]`);
@@ -212,6 +224,11 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus(qs('users-status'), err.message, true);
     }
   });
+
+  const importBtn = qs('import-jellyfin-btn');
+  if (importBtn) {
+    importBtn.addEventListener('click', importJellyfinUsers);
+  }
 
   // periodic refresh
   setInterval(() => {

@@ -111,6 +111,14 @@ const fetchJson = async (url, options = {}) => {
   return data;
 };
 
+const handleLoginSuccess = (user) => {
+  state.user = user;
+  if (state.user) sessionStorage.setItem('user', JSON.stringify(state.user));
+  updateUserUI();
+  setStatus(qs('auth-status'), '');
+  loadPlaylists();
+};
+
 const updateUserUI = () => {
   const user = state.user;
   qs('user-name').textContent = user ? user.username : 'Guest';
@@ -495,6 +503,25 @@ const refreshSession = async () => {
   }
 };
 
+const loginWithJellyfin = async () => {
+  const username = qs('username').value.trim();
+  const password = qs('password').value;
+  if (!username || !password) {
+    setStatus(qs('auth-status'), 'Username and password required for Jellyfin login.', true);
+    return;
+  }
+  setStatus(qs('auth-status'), 'Signing in with Jellyfin…');
+  try {
+    const data = await fetchJson('/api/auth/login/jellyfin', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    handleLoginSuccess(data.user);
+  } catch (err) {
+    setStatus(qs('auth-status'), err.message, true);
+  }
+};
+
 const bindAuth = () => {
   qs('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -508,15 +535,16 @@ const bindAuth = () => {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      state.user = data.user;
-      if (state.user) sessionStorage.setItem('user', JSON.stringify(state.user));
-      updateUserUI();
-      setStatus(qs('auth-status'), '');
-      loadPlaylists();
+      handleLoginSuccess(data.user);
     } catch (err) {
       setStatus(qs('auth-status'), err.message, true);
     }
   });
+
+  const jellyfinBtn = qs('jellyfin-login-btn');
+  if (jellyfinBtn) {
+    jellyfinBtn.addEventListener('click', () => loginWithJellyfin());
+  }
 
   qs('logout-btn').addEventListener('click', async () => {
     await fetchJson('/api/auth/logout', { method: 'POST' }).catch(() => {});

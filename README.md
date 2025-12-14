@@ -66,6 +66,13 @@ npm start
 - Keep `DB_PATH` on persistent storage; SQLite WAL is enabled.
 - If using Cloudflare/NGINX/etc., proxy to your app port and forward `X-Forwarded-Proto`.
 
+## Jellyfin auth & user sync
+- Jellyfin server: `https://theater.cat` (defaults to this). IPTV app runs at `tv.theater.cat`; device id defaults to that host.
+- Required env: set `JELLYFIN_SERVER_URL=https://theater.cat`; optional `JELLYFIN_DEVICE_ID` and `JELLYFIN_TIMEOUT_MS` (default 8000ms).
+- User import requires a Jellyfin admin API key: set `JELLYFIN_API_KEY=<token>` to enable `/api/admin/users/import-jellyfin` (button in Users admin page).
+- Sign-in page includes a **Log in with Jellyfin** button; credentials post to the server, sessions stay HttpOnly with same-site cookies (`SESSION_COOKIE_SECURE=true` in prod + `TRUST_PROXY` for your proxy hops).
+- Disabled Jellyfin users are skipped; admins stay admins.
+
 ## Notes
 - Playlists are snapshots; auto-import can re-fetch on a schedule if configured.
 - Upload cap: 20MB for playlists. Auto-import cap: 10MB.

@@ -10,6 +10,12 @@ const { XMLParser } = require('fast-xml-parser');
 
 const db = require('./src/db');
 const { requireAuth, requireAdmin, sanitizeUser, verifyCredentials } = require('./src/auth');
+const {
+  authenticateJellyfinUser,
+  syncLocalUserFromJellyfin,
+  importJellyfinUsers,
+  isJellyfinConfigured,
+} = require('./src/jellyfin');
 const { parseM3U } = require('./src/m3uParser');
 
 const buildM3U = (list = []) => {
@@ -206,6 +212,29 @@ app.post('/api/auth/login', (req, res) => {
   req.session.save(() => {
     res.json({ user: sanitizeUser(user) });
   });
+});
+
+app.post('/api/auth/login/jellyfin', async (req, res) => {
+  if (!isJellyfinConfigured()) {
+    return res.status(503).json({ error: 'Jellyfin login is not configured on this server.' });
+  }
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
+  try {
+    const result = await authenticateJellyfinUser({ username, password });
+    const localUser = syncLocalUserFromJellyfin({
+      username: result?.jellyfinUser?.Name || username,
+      isAdmin: result?.isAdmin,
+    });
+    const safeUser = sanitizeUser(localUser);
+    req.session.user = safeUser;
+    req.session.save(() => res.json({ user: safeUser }));
+  } catch (err) {
+    const msg = err?.message || 'Jellyfin login failed.';
+    res.status(401).json({ error: msg });
+  }
 });
 
 app.post('/api/auth/logout', requireAuth, (req, res) => {
@@ -428,6 +457,19 @@ app.post('/api/playlists/:id/channels/description', requireAdmin, (req, res) => 
 app.get('/api/admin/users', requireAdmin, (_req, res) => {
   const users = db.listUsers();
   res.json({ users });
+});
+
+app.post('/api/admin/users/import-jellyfin', requireAdmin, async (_req, res) => {
+  if (!isJellyfinConfigured(true)) {
+    return res.status(503).json({ error: 'Jellyfin import is not configured (missing API key).' });
+  }
+  try {
+    const summary = await importJellyfinUsers();
+    return res.json({ ok: true, ...summary });
+  } catch (err) {
+    const msg = err?.message || 'Failed to import Jellyfin users';
+    return res.status(400).json({ error: msg });
+  }
 });
 
 app.post('/api/admin/users', requireAdmin, (req, res) => {
