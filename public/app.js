@@ -307,6 +307,7 @@ const playChannel = (channel) => {
     clearAttemptTimer();
     clearBufferingTimer();
     destroyPlayer();
+    let failedThisAttempt = false;
     const candidate = candidates[attempt];
     const source = candidate.url;
     const proxied = candidate.proxy ? rewriteUrl(source) : source;
@@ -377,6 +378,7 @@ const playChannel = (channel) => {
       });
       state.hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data) return;
+        if (failedThisAttempt) return;
         const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
         const codeNum = data?.response?.code || 0;
 
@@ -385,6 +387,7 @@ const playChannel = (channel) => {
           const msg = codeNum === 429
             ? 'Proxy rate limited (429). Trying next source…'
             : `Source returned ${codeNum}. Trying next source…`;
+          failedThisAttempt = true;
           startNext(msg);
           return;
         }
@@ -408,6 +411,11 @@ const playChannel = (channel) => {
           if (bufferingDetails.includes(data.details)) {
             markBuffering('Buffering… retrying…');
             state.hls.startLoad();
+            return;
+          }
+          if (data.details === 'manifestLoadError' || data.details === 'levelLoadError') {
+            failedThisAttempt = true;
+            startNext('Manifest/level load failed. Trying next source…');
             return;
           }
           setStatus(statusEl, `HLS issue: ${data.details}${code}`, true);
