@@ -433,7 +433,7 @@ body {
   background: #05060b;
   border: 1px solid var(--border);
   border-radius: 14px;
-  overflow: visible;
+  overflow: hidden;
   box-shadow: var(--shadow);
   width: 100%;
   max-width: 960px;
@@ -445,15 +445,18 @@ body {
 .video-shell {
   position: relative;
   width: 100%;
-  height: auto;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #05060b;
 }
 
-.player video {
+.video-shell video {
   width: 100%;
-  height: auto;
+  height: 100%;
+  max-height: 70vh;
   background: #05060b;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -633,7 +636,7 @@ body {
     max-width: 100%;
     margin: 0;
   }
-  .player video {
+  .video-shell video {
     max-height: 300px;
   }
   .admin-grid {
@@ -716,7 +719,7 @@ body {
   .player-frame {
     border-radius: 12px;
   }
-  .player video {
+  .video-shell video {
     max-height: 240px;
   }
   .controls-bar {

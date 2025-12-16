@@ -252,6 +252,14 @@ const playChannel = (channel) => {
   const candidates = buildCandidates(channel.url);
   let attempt = 0;
   let attemptTimer = null;
+  let bufferingTimer = null;
+
+  const clearBufferingTimer = () => {
+    if (bufferingTimer) {
+      clearTimeout(bufferingTimer);
+      bufferingTimer = null;
+    }
+  };
 
   const clearAttemptTimer = () => {
     if (attemptTimer) {
@@ -260,8 +268,17 @@ const playChannel = (channel) => {
     }
   };
 
+  const markBuffering = (message = 'Buffering…') => {
+    clearBufferingTimer();
+    setStatus(statusEl, message);
+    bufferingTimer = setTimeout(() => {
+      startNext('Buffering timeout, trying next source…');
+    }, 15000);
+  };
+
   const startNext = (reason) => {
     clearAttemptTimer();
+    clearBufferingTimer();
     if (reason) setStatus(statusEl, reason, true);
     attempt += 1;
     if (attempt >= candidates.length) {
@@ -272,12 +289,18 @@ const playChannel = (channel) => {
   };
 
   const startAttempt = () => {
+    clearAttemptTimer();
+    clearBufferingTimer();
     destroyPlayer();
     const candidate = candidates[attempt];
     const source = candidate.url;
     const proxied = candidate.proxy ? rewriteUrl(source) : source;
     const isHls = source.toLowerCase().includes('.m3u8');
     const useHls = !!(window.Hls && window.Hls.isSupported());
+    const maxNetworkRecoveries = 2;
+    const maxMediaRecoveries = 2;
+    let networkRecoveries = 0;
+    let mediaRecoveries = 0;
 
     setStatus(statusEl, `Loading source ${attempt + 1}/${candidates.length}…`);
     clearAttemptTimer();
@@ -296,10 +319,19 @@ const playChannel = (channel) => {
 
     video.onplaying = () => {
       clearAttemptTimer();
+      clearBufferingTimer();
       setStatus(statusEl, '');
     };
     video.ontimeupdate = () => updateProgress(video);
     video.onloadedmetadata = () => updateProgress(video);
+    video.onwaiting = () => {
+      if (state.hls) state.hls.startLoad();
+      markBuffering();
+    };
+    video.onstalled = () => {
+      if (state.hls) state.hls.startLoad();
+      markBuffering();
+    };
 
     if (isHls && useHls) {
       class ProxyLoader extends Hls.DefaultConfig.loader {
@@ -329,21 +361,36 @@ const playChannel = (channel) => {
         video.play().catch(() => {});
       });
       state.hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data?.fatal) {
-          const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
+        if (!data) return;
+        const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < maxNetworkRecoveries) {
+            networkRecoveries += 1;
+            markBuffering(`Network hiccup… retry ${networkRecoveries}/${maxNetworkRecoveries}`);
+            state.hls.startLoad();
+            return;
+          }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < maxMediaRecoveries) {
+            mediaRecoveries += 1;
+            markBuffering(`Recovering stream… ${mediaRecoveries}/${maxMediaRecoveries}`);
+            state.hls.recoverMediaError();
+            return;
+          }
           startNext(`HLS fatal (${data.type || 'unknown'}${code}). Trying next source…`);
-        } else if (data?.details) {
-          const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
+        } else if (data.details) {
+          const bufferingDetails = ['bufferStalledError', 'fragLoadError', 'fragLoadTimeout'];
+          if (bufferingDetails.includes(data.details)) {
+            markBuffering('Buffering… retrying…');
+            state.hls.startLoad();
+            return;
+          }
           setStatus(statusEl, `HLS issue: ${data.details}${code}`, true);
         }
       });
       state.hls.on(Hls.Events.BUFFER_STALLED, () => {
+        markBuffering('Buffering… retrying…');
         state.hls.startLoad();
-        setStatus(statusEl, 'Buffering…');
       });
-      video.addEventListener('stalled', () => {
-        setStatus(statusEl, 'Buffering…');
-      }, { once: true });
     } else {
       video.src = proxied;
       video.onerror = () => {
