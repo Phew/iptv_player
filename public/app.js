@@ -378,15 +378,18 @@ const playChannel = (channel) => {
       state.hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data) return;
         const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
+        const codeNum = data?.response?.code || 0;
+
+        // Treat common dead-source codes as immediate failures (even if non-fatal)
+        if ([404, 403, 410, 429].includes(codeNum)) {
+          const msg = codeNum === 429
+            ? 'Proxy rate limited (429). Trying next source…'
+            : `Source returned ${codeNum}. Trying next source…`;
+          startNext(msg);
+          return;
+        }
+
         if (data.fatal) {
-          if (data?.response?.code === 429) {
-            startNext('Proxy rate limited (429). Trying next source…');
-            return;
-          }
-          if (data?.response?.code === 404) {
-            startNext('Source returned 404. Trying next source…');
-            return;
-          }
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < maxNetworkRecoveries) {
             networkRecoveries += 1;
             markBuffering(`Network hiccup… retry ${networkRecoveries}/${maxNetworkRecoveries}`);
