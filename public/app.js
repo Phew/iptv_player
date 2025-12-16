@@ -31,12 +31,27 @@ const buildCandidates = (url) => {
     variants.push(`${clean}.m3u8`);
     variants.push(`${clean}/index.m3u8`);
   }
-  // Try direct then proxied for each variant
+
+  // Prefer proxied/HTTPS versions to avoid mixed content, adblock, or bad certs
   const list = [];
   variants.forEach((v) => {
-    list.push({ url: v, proxy: false });
-    list.push({ url: v, proxy: true });
+    const isHttp = v.toLowerCase().startsWith('http://');
+    const upgraded = isHttp ? v.replace(/^http:/i, 'https:') : v;
+
+    // Always try proxied (uses our HTTPS host)
+    list.push({ url: upgraded, proxy: true });
+
+    // If original was http, also allow proxied http as a fallback
+    if (isHttp && upgraded !== v) {
+      list.push({ url: v, proxy: true });
+    }
+
+    // Only allow direct fetch when already HTTPS
+    if (!isHttp) {
+      list.push({ url: upgraded, proxy: false });
+    }
   });
+
   return list.filter((c, idx, arr) =>
     arr.findIndex((x) => x.url === c.url && x.proxy === c.proxy) === idx
   );
@@ -364,6 +379,14 @@ const playChannel = (channel) => {
         if (!data) return;
         const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
         if (data.fatal) {
+          if (data?.response?.code === 429) {
+            startNext('Proxy rate limited (429). Trying next source…');
+            return;
+          }
+          if (data?.response?.code === 404) {
+            startNext('Source returned 404. Trying next source…');
+            return;
+          }
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < maxNetworkRecoveries) {
             networkRecoveries += 1;
             markBuffering(`Network hiccup… retry ${networkRecoveries}/${maxNetworkRecoveries}`);
