@@ -181,6 +181,13 @@ app.use('/api/proxy', requireAuth, createProxyMiddleware({
     // Explicit referer/origin override
     if (req.query.referer) {
       proxyReq.setHeader('Referer', req.query.referer);
+      // Also set Origin to match Referer for strict CORS checks if not explicitly provided
+      if (!req.query.origin) {
+        try {
+          const refUrl = new URL(req.query.referer);
+          proxyReq.setHeader('Origin', `${refUrl.protocol}//${refUrl.host}`);
+        } catch (e) {}
+      }
     } else {
       // Default to target origin if no specific referer provided
       try {
