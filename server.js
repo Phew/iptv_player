@@ -64,7 +64,7 @@ const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
 const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
 const AUTO_IMPORT_CLEAR = String(process.env.AUTO_IMPORT_CLEAR || '').toLowerCase() === 'true';
 const SITE_NAME = process.env.SITE_NAME || db.getSetting('siteName') || 'theater.cat';
-const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 20000;
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 40000;
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024; // 2MB cap to avoid huge manifests
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
@@ -217,6 +217,13 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
   } else if (includeOrigin && !originParam) {
     // explicit empty origin should stay null
     origin = null;
+  } else {
+    // default: align Origin to referer origin to satisfy hosts that require it
+    try {
+      origin = new URL(referer).origin;
+    } catch (_e) {
+      origin = null;
+    }
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
