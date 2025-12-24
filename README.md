@@ -1,4 +1,4 @@
-# theater.cat
+# tv.theater.cat
 
 Lightweight, mobile-first IPTV with auth, admin uploads/imports, EPG ingest, auto-import scheduling, and basic branding. Express + SQLite (better-sqlite3) + vanilla JS + hls.js.
 
