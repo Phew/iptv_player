@@ -162,6 +162,10 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
       },
     });
 
+    if (!upstream.ok) {
+      console.log(`[proxy] Upstream error ${upstream.status} for ${target}`);
+    }
+
     res.status(upstream.status);
     const passHeaders = ['content-type', 'content-length', 'accept-ranges', 'cache-control', 'content-range'];
     passHeaders.forEach((h) => {
@@ -181,6 +185,10 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
         clearTimeout(timer);
         return res.status(413).json({ error: 'Manifest too large' });
       }
+      
+      // Use the final URL after redirects for resolving relative paths
+      const finalUrl = new URL(upstream.url || target);
+      
       const buf = manifestBuf.toString('utf8');
       const lines = buf.split(/\r?\n/).map((line) => {
         if (!line || line.startsWith('#')) return line;
@@ -189,8 +197,8 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
           const proxied = `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(line)}`;
           return proxied;
         }
-        // Relative -> resolve against targetUrl
-        const absolute = new URL(line, targetUrl).toString();
+        // Relative -> resolve against finalUrl
+        const absolute = new URL(line, finalUrl).toString();
         const proxied = `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(absolute)}`;
         return proxied;
       });
