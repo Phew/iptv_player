@@ -317,7 +317,7 @@ const playChannel = (channel) => {
     setStatus(statusEl, message);
     bufferingTimer = setTimeout(() => {
       startNext('Buffering timeout, trying next source…');
-    }, 15000);
+    }, 30000); // Increased from 15s to 30s
   };
 
   const startNext = (reason) => {
@@ -361,7 +361,7 @@ const playChannel = (channel) => {
     clearAttemptTimer();
     attemptTimer = setTimeout(() => {
       startNext('Timeout, trying next source…');
-    }, 15000);
+    }, 30000); // Increased from 15s to 30s
 
     video.oncanplay = () => {
       setStatus(statusEl, '');
