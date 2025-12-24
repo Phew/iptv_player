@@ -224,9 +224,7 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
   const isManifestLike = isProbablyManifest('', parsed.pathname);
   const headers = {
     'User-Agent': userAgent,
-    Accept: isManifestLike
-      ? 'application/vnd.apple.mpegurl,application/x-mpegurl;q=0.9,*/*;q=0.5'
-      : (req.get('accept') || '*/*'),
+    Accept: '*/*',
     'Accept-Language': req.get('accept-language') || 'en-US,en;q=0.9',
     Referer: referer,
     ...(origin ? { Origin: origin } : {}),
