@@ -136,104 +136,135 @@ app.post('/api/admin/settings', requireAdmin, (req, res) => {
   return res.json({ ok: true, siteName: name });
 });
 
-const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
+const DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+const hopByHopHeaders = new Set([
+  'transfer-encoding',
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'upgrade',
+]);
 
-// ... existing code ...
+const isProbablyManifest = (contentType = '', url = '') => {
+  const ct = contentType.toLowerCase();
+  return ct.includes('mpegurl') || ct.includes('vnd.apple.mpegurl') || ct.includes('application/x-mpegurl')
+    || url.toLowerCase().endsWith('.m3u8') || url.toLowerCase().endsWith('.m3u');
+};
 
-// Proxy middleware for /api/proxy
-app.use('/api/proxy', requireAuth, createProxyMiddleware({
-  target: 'http://localhost', // dummy target, will be overridden by router
-  changeOrigin: true,
-  proxyTimeout: 20000,
-  router: (req) => {
-    const target = req.query.url;
-    if (!target) return undefined;
+const buildProxyUrl = (targetUrl, { referer, origin, agent } = {}) => {
+  const params = new URLSearchParams({ url: targetUrl });
+  if (referer) params.set('referer', referer);
+  if (origin) params.set('origin', origin);
+  if (agent) params.set('agent', agent);
+  return `/api/proxy?${params.toString()}`;
+};
+
+const rewriteManifest = (body, targetUrl, { referer, origin, agent } = {}) => {
+  const base = new URL(targetUrl);
+  const safeReferer = referer || `${base.origin}/`;
+  const safeOrigin = origin || base.origin;
+  return body.split(/\r?\n/).map((line) => {
+    if (!line || line.startsWith('#')) return line;
     try {
-      const url = new URL(target);
-      return `${url.protocol}//${url.host}`;
-    } catch (e) {
-      return undefined;
+      const absolute = new URL(line, base).toString();
+      return buildProxyUrl(absolute, { referer: safeReferer, origin: safeOrigin, agent });
+    } catch (err) {
+      return line;
     }
-  },
-  pathRewrite: (path, req) => {
-    const target = req.query.url;
-    if (!target) return path;
-    try {
-      const url = new URL(target);
-      return url.pathname + url.search;
-    } catch (e) {
-      return path;
+  }).join('\n');
+};
+
+const readBodyWithLimit = async (body, maxBytes) => {
+  if (!body) return '';
+  const reader = body.getReader();
+  let size = 0;
+  const chunks = [];
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value?.length || 0;
+    if (size > maxBytes) throw new Error('Manifest too large');
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+};
+
+// Fresh, minimal streaming proxy with manifest rewriting
+app.get('/api/proxy', requireAuth, async (req, res) => {
+  const target = req.query.url;
+  if (!target) return res.status(400).json({ error: 'url query param required' });
+
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch (err) {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+
+  const userAgent = req.query.agent || DEFAULT_UA;
+  const referer = req.query.referer || `${parsed.origin}/`;
+  const origin = req.query.origin || parsed.origin;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+
+  const headers = {
+    'User-Agent': userAgent,
+    Accept: req.get('accept') || '*/*',
+    'Accept-Language': req.get('accept-language') || 'en-US,en;q=0.9',
+    Referer: referer,
+    ...(origin ? { Origin: origin } : {}),
+  };
+
+  if (req.headers.range) {
+    headers.Range = req.headers.range;
+  }
+
+  try {
+    const upstream = await fetch(parsed.toString(), {
+      method: 'GET',
+      headers,
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+
+    const contentType = upstream.headers.get('content-type') || '';
+    const statusCode = upstream.status;
+
+    if (isProbablyManifest(contentType, parsed.pathname)) {
+      const manifest = await readBodyWithLimit(upstream.body, MAX_MANIFEST_BYTES);
+      const rewritten = rewriteManifest(manifest, upstream.url || parsed.toString(), { referer, origin, agent: req.query.agent });
+      res.status(statusCode);
+      res.setHeader('Content-Type', contentType || 'application/vnd.apple.mpegurl');
+      return res.send(rewritten);
     }
-  },
-  onProxyReq: (proxyReq, req, res) => {
-    // Basic browser spoofing
-    let userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
-    
-    // Allow overriding User-Agent from query param
-    if (req.query.agent) {
-      userAgent = req.query.agent;
-    }
-    
-    proxyReq.setHeader('User-Agent', userAgent);
-    proxyReq.setHeader('Accept', '*/*');
-    proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.9');
-    
-    // Some providers (like Turbobunny) block requests if they don't have this header
-    // or if the Referer doesn't match the Origin exactly.
-    // Try removing Origin entirely if Referer is set, or setting it to null to avoid CORS preflight issues
-    // Actually, many streams fail if Origin is present but doesn't match the stream host.
-    // Let's try removing Origin by default unless explicitly provided.
-    proxyReq.removeHeader('Origin');
 
-    // Explicit referer/origin override
-    if (req.query.referer) {
-      proxyReq.setHeader('Referer', req.query.referer);
-    } else {
-      // Default to target origin if no specific referer provided
-      try {
-        const url = new URL(req.query.url);
-        proxyReq.setHeader('Referer', `${url.protocol}//${url.host}/`);
-      } catch (e) {}
-    }
+    res.status(statusCode);
+    upstream.headers.forEach((value, key) => {
+      if (!hopByHopHeaders.has(key.toLowerCase())) {
+        res.setHeader(key, value);
+      }
+    });
 
-    if (req.query.origin) proxyReq.setHeader('Origin', req.query.origin);
-  },
-  selfHandleResponse: true, // We want to intercept responses to rewrite M3U
-  onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
-    const contentType = proxyRes.headers['content-type'] || '';
-    const isM3U = /mpegurl|vnd\.apple\.mpegurl/i.test(contentType);
-    
-    if (!isM3U) return responseBuffer;
-
-    try {
-      const target = req.query.url;
-      const finalUrl = new URL(proxyRes.responseUrl || target); // responseUrl if available, else initial target
-      const finalOrigin = finalUrl.origin;
-      
-      const buf = responseBuffer.toString('utf8');
-      const lines = buf.split(/\r?\n/).map((line) => {
-        if (!line || line.startsWith('#')) return line;
-        
-        // Prepare encoded referer/origin args for the segment proxy
-        const refArg = `&referer=${encodeURIComponent(finalUrl.href)}`;
-        const originArg = `&origin=${encodeURIComponent(finalOrigin)}`;
-        const extraArgs = `${refArg}${originArg}`;
-
-        // Absolute URL
-        if (/^https?:\/\//i.test(line)) {
-          return `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(line)}${extraArgs}`;
+    return pipeline(
+      Readable.fromWeb(upstream.body),
+      res,
+      (err) => {
+        if (err && !res.headersSent) {
+          res.status(502).end();
         }
-        // Relative -> resolve against finalUrl
-        const absolute = new URL(line, finalUrl).toString();
-        return `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(absolute)}${extraArgs}`;
-      });
-      return lines.join('\n');
-    } catch (e) {
-      console.error('[proxy-rewrite] Error rewriting M3U:', e);
-      return responseBuffer;
-    }
-  }),
-}));
+      },
+    );
+  } catch (err) {
+    const msg = err.name === 'AbortError' ? 'Upstream timed out' : err.message || 'Proxy failed';
+    return res.status(502).json({ error: msg });
+  } finally {
+    clearTimeout(timer);
+  }
+});
 
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
