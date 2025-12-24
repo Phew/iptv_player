@@ -147,23 +147,37 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
   try {
     const targetUrl = new URL(target);
-    const referer = `${targetUrl.origin}/`;
+    const referer = req.query.referer || `${targetUrl.origin}/`;
+    const origin = req.query.origin || targetUrl.origin;
+    
+    const headers = {
+      'user-agent': 'VLC/3.0.20 LibVLC/3.0.20',
+      accept: '*/*',
+      referer,
+      origin,
+      'accept-language': 'en-US,en;q=0.9',
+      ...(req.headers.range ? { range: req.headers.range } : {}),
+    };
+
+    // Forward cookie if present (important for session-based streams)
+    const clientCookie = req.headers.cookie;
+    if (clientCookie) {
+      headers.cookie = clientCookie;
+    }
+
     const upstream = await fetch(target, {
       redirect: 'follow',
       signal: controller.signal,
-      headers: {
-        'user-agent': 'VLC/3.0.20 LibVLC/3.0.20',
-        accept: '*/*',
-        referer,
-        origin: targetUrl.origin,
-        'accept-language': 'en-US,en;q=0.9',
-        // Pass through range if present (for TS/MP4 seeking)
-        ...(req.headers.range ? { range: req.headers.range } : {}),
-      },
+      headers,
     });
 
     if (!upstream.ok) {
       console.log(`[proxy] Upstream error ${upstream.status} for ${target}`);
+      // Try to read body for debugging if possible
+      try {
+         const errBody = await upstream.text();
+         console.log(`[proxy] Upstream error body (first 200 chars): ${errBody.slice(0, 200)}`);
+      } catch (_e) {}
     }
 
     res.status(upstream.status);
@@ -172,6 +186,19 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
       const v = upstream.headers.get(h);
       if (v) res.setHeader(h, v);
     });
+
+    // Forward Set-Cookie headers from upstream to client
+    // Native fetch in Node 18+ supports headers.getSetCookie()
+    if (typeof upstream.headers.getSetCookie === 'function') {
+      const cookies = upstream.headers.getSetCookie();
+      if (cookies && cookies.length) {
+        res.setHeader('set-cookie', cookies);
+      }
+    } else {
+      // Fallback for older envs or polyfills
+      const rawCookie = upstream.headers.get('set-cookie');
+      if (rawCookie) res.setHeader('set-cookie', rawCookie);
+    }
 
     const contentType = upstream.headers.get('content-type') || '';
     const isM3U = /mpegurl|vnd\.apple\.mpegurl/i.test(contentType);
@@ -188,19 +215,25 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
       
       // Use the final URL after redirects for resolving relative paths
       const finalUrl = new URL(upstream.url || target);
+      const finalOrigin = finalUrl.origin;
       
       const buf = manifestBuf.toString('utf8');
       const lines = buf.split(/\r?\n/).map((line) => {
         if (!line || line.startsWith('#')) return line;
-        // Absolute URL, leave
+        
+        // Prepare encoded referer/origin args for the segment proxy
+        // We use the finalUrl as the referer for segments
+        const refArg = `&referer=${encodeURIComponent(finalUrl.href)}`;
+        const originArg = `&origin=${encodeURIComponent(finalOrigin)}`;
+        const extraArgs = `${refArg}${originArg}`;
+
+        // Absolute URL
         if (/^https?:\/\//i.test(line)) {
-          const proxied = `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(line)}`;
-          return proxied;
+          return `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(line)}${extraArgs}`;
         }
         // Relative -> resolve against finalUrl
         const absolute = new URL(line, finalUrl).toString();
-        const proxied = `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(absolute)}`;
-        return proxied;
+        return `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(absolute)}${extraArgs}`;
       });
       res.setHeader('content-type', contentType || 'application/vnd.apple.mpegurl');
       res.setHeader('cache-control', 'no-store');
