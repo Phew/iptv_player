@@ -64,7 +64,7 @@ const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
 const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
 const AUTO_IMPORT_CLEAR = String(process.env.AUTO_IMPORT_CLEAR || '').toLowerCase() === 'true';
 const SITE_NAME = process.env.SITE_NAME || db.getSetting('siteName') || 'theater.cat';
-const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 8000;
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 20000;
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024; // 2MB cap to avoid huge manifests
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
@@ -144,6 +144,7 @@ const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middl
 app.use('/api/proxy', requireAuth, createProxyMiddleware({
   target: 'http://localhost', // dummy target, will be overridden by router
   changeOrigin: true,
+  proxyTimeout: 20000,
   router: (req) => {
     const target = req.query.url;
     if (!target) return undefined;
@@ -166,12 +167,16 @@ app.use('/api/proxy', requireAuth, createProxyMiddleware({
   },
   onProxyReq: (proxyReq, req, res) => {
     // Basic browser spoofing
-    proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+    let userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+    
+    // Allow overriding User-Agent from query param
+    if (req.query.agent) {
+      userAgent = req.query.agent;
+    }
+    
+    proxyReq.setHeader('User-Agent', userAgent);
     proxyReq.setHeader('Accept', '*/*');
     proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.9');
-    
-    // Some servers block connection: keep-alive from proxies, try close or omit
-    // proxyReq.setHeader('Connection', 'keep-alive');
     
     // Explicit referer/origin override
     if (req.query.referer) {
@@ -300,6 +305,8 @@ app.get('/api/playlists/:id/channels', requireAuth, (req, res) => {
       ...c,
       programTitle: epg?.title || '',
       programDesc: epg?.description || '',
+      userAgent: c.userAgent,
+      referer: c.referer,
     };
   });
   res.json({

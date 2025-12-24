@@ -20,14 +20,20 @@ const dlog = (...args) => {
   try { console.log('[iptv]', ...args); } catch (_e) {}
 };
 const fmtDate = (value) => new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric' });
-const proxyUrl = (url) => `/api/proxy?url=${encodeURIComponent(url)}`;
-const rewriteUrl = (url) => {
+const proxyUrl = (url, opts = {}) => {
+  let u = `/api/proxy?url=${encodeURIComponent(url)}`;
+  if (opts.referer) u += `&referer=${encodeURIComponent(opts.referer)}`;
+  if (opts.userAgent) u += `&agent=${encodeURIComponent(opts.userAgent)}`;
+  return u;
+};
+const rewriteUrl = (url, opts) => {
   if (!url) return url;
   if (url.startsWith('/api/proxy?') || url.includes('/api/proxy?url=')) return url;
-  return proxyUrl(url);
+  return proxyUrl(url, opts);
 };
 
-const buildCandidates = (url) => {
+const buildCandidates = (channel) => {
+  const url = channel.url;
   const clean = (url || '').trim();
   if (!clean) return [];
   const variants = [clean];
@@ -286,7 +292,7 @@ const playChannel = (channel) => {
   };
 
   const statusEl = qs('player-status');
-  const candidates = buildCandidates(channel.url);
+  const candidates = buildCandidates(channel);
   dlog('player: candidates', candidates);
   let attempt = 0;
   let attemptTimer = null;
@@ -334,7 +340,9 @@ const playChannel = (channel) => {
     let failedThisAttempt = false;
     const candidate = candidates[attempt];
     const source = candidate.url;
-    const proxied = candidate.proxy ? rewriteUrl(source) : source;
+    // Pass userAgent/referer if present
+    const proxyOpts = { userAgent: channel.userAgent, referer: channel.referer };
+    const proxied = candidate.proxy ? rewriteUrl(source, proxyOpts) : source;
     const isHls = source.toLowerCase().includes('.m3u8');
     const useHls = !!(window.Hls && window.Hls.isSupported());
     dlog('player: startAttempt', {
@@ -384,7 +392,9 @@ const playChannel = (channel) => {
     if (isHls && useHls) {
       class ProxyLoader extends Hls.DefaultConfig.loader {
         load(context, config, callbacks) {
-          const updated = { ...context, url: rewriteUrl(context.url) };
+          // Pass userAgent/referer if present in channel
+          const proxyOpts = { userAgent: channel.userAgent, referer: channel.referer };
+          const updated = { ...context, url: rewriteUrl(context.url, proxyOpts) };
           super.load(updated, config, callbacks);
         }
       }

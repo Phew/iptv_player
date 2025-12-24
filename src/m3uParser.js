@@ -18,11 +18,24 @@ const parseM3U = (content = '') => {
     const namePart = line.split(',', 2)[1] || 'Unknown';
     let group = extractAttr(line, 'group-title');
 
-    // Walk ahead to find group overrides (#EXTGRP) and the first non-comment URL
+    // Walk ahead to find group overrides (#EXTGRP), VLC opts, and the first non-comment URL
     let j = i + 1;
+    let userAgent = '';
+    let referer = '';
+    
     while (j < lines.length && lines[j].startsWith('#')) {
-      if (!group && lines[j].startsWith('#EXTGRP')) {
-        group = cleanup(lines[j].replace('#EXTGRP:', ''));
+      const l = lines[j];
+      if (!group && l.startsWith('#EXTGRP')) {
+        group = cleanup(l.replace('#EXTGRP:', ''));
+      }
+      if (l.startsWith('#EXTVLCOPT:')) {
+        const opt = l.replace('#EXTVLCOPT:', '').trim();
+        if (opt.toLowerCase().startsWith('http-user-agent=')) {
+          userAgent = opt.substring('http-user-agent='.length).trim();
+        }
+        if (opt.toLowerCase().startsWith('http-referrer=')) {
+          referer = opt.substring('http-referrer='.length).trim();
+        }
       }
       j += 1;
     }
@@ -36,6 +49,8 @@ const parseM3U = (content = '') => {
       logo: extractAttr(line, 'tvg-logo'),
       group: group || extractAttr(line, 'group-title'),
       tvgId: extractAttr(line, 'tvg-id'),
+      userAgent,
+      referer,
     });
   }
 
