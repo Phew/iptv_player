@@ -45,14 +45,10 @@ const buildCandidates = (url) => {
       const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(parsed.hostname || '');
       const upgraded = isHttp ? v.replace(/^http:/i, 'https:') : v;
 
-      // If host is IP or original is http, prefer proxied upgraded HTTPS, then proxied original;
-      // still try direct as a last resort in case proxy is blocked upstream.
+      // If host is IP or original is http, force proxy (avoid mixed content/cert issues)
       if (isHttp || isIp) {
         list.push({ url: upgraded, proxy: true });
         if (upgraded !== v) list.push({ url: v, proxy: true });
-        // Last-resort direct attempts (may be blocked by mixed content, but keeps parity with prior behavior)
-        list.push({ url: upgraded, proxy: false });
-        if (upgraded !== v) list.push({ url: v, proxy: false });
         return;
       }
 
