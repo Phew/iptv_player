@@ -242,10 +242,8 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ user: null });
-  }
-  res.json({ user: req.session.user });
+  const user = req.session?.user ? sanitizeUser(req.session.user) : null;
+  return res.status(200).json({ user });
 });
 
 app.get('/api/playlists', requireAuth, (_req, res) => {

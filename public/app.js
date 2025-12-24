@@ -356,9 +356,10 @@ const playChannel = (channel) => {
           super.load(updated, config, callbacks);
         }
       }
+      const loaderClass = candidate.proxy ? ProxyLoader : Hls.DefaultConfig.loader;
       const hlsConfig = {
         ...Hls.DefaultConfig,
-        loader: ProxyLoader,
+        loader: loaderClass,
         maxBufferLength: 12,
         maxMaxBufferLength: 30,
         liveSyncDurationCount: 3,
