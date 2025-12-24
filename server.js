@@ -171,7 +171,17 @@ app.use('/api/proxy', requireAuth, createProxyMiddleware({
     proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.9');
     
     // Explicit referer/origin override
-    if (req.query.referer) proxyReq.setHeader('Referer', req.query.referer);
+    if (req.query.referer) {
+      proxyReq.setHeader('Referer', req.query.referer);
+    } else {
+      // Default to target origin if no specific referer provided
+      try {
+        const url = new URL(req.query.url);
+        proxyReq.setHeader('Referer', `${url.protocol}//${url.host}/`);
+        proxyReq.setHeader('Origin', `${url.protocol}//${url.host}`);
+      } catch (e) {}
+    }
+
     if (req.query.origin) proxyReq.setHeader('Origin', req.query.origin);
   },
   selfHandleResponse: true, // We want to intercept responses to rewrite M3U
