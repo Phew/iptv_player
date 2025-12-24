@@ -140,9 +140,6 @@ const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middl
 
 // ... existing code ...
 
-const app = express();
-// ... existing middleware ...
-
 // Proxy middleware for /api/proxy
 app.use('/api/proxy', requireAuth, createProxyMiddleware({
   target: 'http://localhost', // dummy target, will be overridden by router
