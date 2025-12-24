@@ -45,10 +45,14 @@ const buildCandidates = (url) => {
       const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(parsed.hostname || '');
       const upgraded = isHttp ? v.replace(/^http:/i, 'https:') : v;
 
-      // If host is IP or original is http, avoid direct mixed-content; prefer proxied upgraded HTTPS, then proxied original.
+      // If host is IP or original is http, prefer proxied upgraded HTTPS, then proxied original;
+      // still try direct as a last resort in case proxy is blocked upstream.
       if (isHttp || isIp) {
         list.push({ url: upgraded, proxy: true });
         if (upgraded !== v) list.push({ url: v, proxy: true });
+        // Last-resort direct attempts (may be blocked by mixed content, but keeps parity with prior behavior)
+        list.push({ url: upgraded, proxy: false });
+        if (upgraded !== v) list.push({ url: v, proxy: false });
         return;
       }
 
@@ -353,7 +357,7 @@ const playChannel = (channel) => {
     clearAttemptTimer();
     attemptTimer = setTimeout(() => {
       startNext('Timeout, trying next source…');
-    }, 12000);
+    }, 8000);
 
     video.oncanplay = () => {
       setStatus(statusEl, '');
