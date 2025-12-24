@@ -136,95 +136,64 @@ app.post('/api/admin/settings', requireAdmin, (req, res) => {
   return res.json({ ok: true, siteName: name });
 });
 
-// Simple proxy to bypass CORS/mixed UA issues for streams
-app.get('/api/proxy', requireAuth, async (req, res) => {
-  const target = req.query.url;
-  if (!target || !/^https?:\/\//i.test(target)) {
-    return res.status(400).json({ error: 'Invalid url' });
-  }
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
-  try {
-    const targetUrl = new URL(target);
-    const referer = req.query.referer || `${targetUrl.origin}/`;
-    const origin = req.query.origin || targetUrl.origin;
+// ... existing code ...
+
+const app = express();
+// ... existing middleware ...
+
+// Proxy middleware for /api/proxy
+app.use('/api/proxy', requireAuth, createProxyMiddleware({
+  target: 'http://localhost', // dummy target, will be overridden by router
+  changeOrigin: true,
+  router: (req) => {
+    const target = req.query.url;
+    if (!target) return undefined;
+    try {
+      const url = new URL(target);
+      return `${url.protocol}//${url.host}`;
+    } catch (e) {
+      return undefined;
+    }
+  },
+  pathRewrite: (path, req) => {
+    const target = req.query.url;
+    if (!target) return path;
+    try {
+      const url = new URL(target);
+      return url.pathname + url.search;
+    } catch (e) {
+      return path;
+    }
+  },
+  onProxyReq: (proxyReq, req, res) => {
+    // Basic browser spoofing
+    proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+    proxyReq.setHeader('Accept', '*/*');
+    proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.9');
     
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Connection': 'keep-alive',
-      ...(req.headers.range ? { Range: req.headers.range } : {}),
-    };
-
-    // Forward cookie if present (important for session-based streams)
-    const clientCookie = req.headers.cookie;
-    if (clientCookie) {
-      headers.Cookie = clientCookie;
-    }
-
-    if (referer) headers.Referer = referer;
-    if (origin) headers.Origin = origin;
-
-    const upstream = await fetch(target, {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers,
-    });
-
-    if (!upstream.ok) {
-      console.log(`[proxy] Upstream error ${upstream.status} for ${target}`);
-      // Try to read body for debugging if possible
-      try {
-         const errBody = await upstream.text();
-         console.log(`[proxy] Upstream error body (first 200 chars): ${errBody.slice(0, 200)}`);
-      } catch (_e) {}
-    }
-
-    res.status(upstream.status);
-    const passHeaders = ['content-type', 'content-length', 'accept-ranges', 'cache-control', 'content-range'];
-    passHeaders.forEach((h) => {
-      const v = upstream.headers.get(h);
-      if (v) res.setHeader(h, v);
-    });
-
-    // Forward Set-Cookie headers from upstream to client
-    // Native fetch in Node 18+ supports headers.getSetCookie()
-    if (typeof upstream.headers.getSetCookie === 'function') {
-      const cookies = upstream.headers.getSetCookie();
-      if (cookies && cookies.length) {
-        res.setHeader('set-cookie', cookies);
-      }
-    } else {
-      // Fallback for older envs or polyfills
-      const rawCookie = upstream.headers.get('set-cookie');
-      if (rawCookie) res.setHeader('set-cookie', rawCookie);
-    }
-
-    const contentType = upstream.headers.get('content-type') || '';
+    // Explicit referer/origin override
+    if (req.query.referer) proxyReq.setHeader('Referer', req.query.referer);
+    if (req.query.origin) proxyReq.setHeader('Origin', req.query.origin);
+  },
+  selfHandleResponse: true, // We want to intercept responses to rewrite M3U
+  onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+    const contentType = proxyRes.headers['content-type'] || '';
     const isM3U = /mpegurl|vnd\.apple\.mpegurl/i.test(contentType);
+    
+    if (!isM3U) return responseBuffer;
 
-    if (!upstream.body) return res.end();
-
-    if (isM3U) {
-      // Buffer small manifest, rewrite relative segment URLs to proxied absolute URLs
-      const manifestBuf = Buffer.from(await upstream.arrayBuffer());
-      if (manifestBuf.length > MAX_MANIFEST_BYTES) {
-        clearTimeout(timer);
-        return res.status(413).json({ error: 'Manifest too large' });
-      }
-      
-      // Use the final URL after redirects for resolving relative paths
-      const finalUrl = new URL(upstream.url || target);
+    try {
+      const target = req.query.url;
+      const finalUrl = new URL(proxyRes.responseUrl || target); // responseUrl if available, else initial target
       const finalOrigin = finalUrl.origin;
       
-      const buf = manifestBuf.toString('utf8');
+      const buf = responseBuffer.toString('utf8');
       const lines = buf.split(/\r?\n/).map((line) => {
         if (!line || line.startsWith('#')) return line;
         
         // Prepare encoded referer/origin args for the segment proxy
-        // We use the finalUrl as the referer for segments
         const refArg = `&referer=${encodeURIComponent(finalUrl.href)}`;
         const originArg = `&origin=${encodeURIComponent(finalOrigin)}`;
         const extraArgs = `${refArg}${originArg}`;
@@ -237,23 +206,13 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
         const absolute = new URL(line, finalUrl).toString();
         return `${req.protocol}://${req.get('host')}/api/proxy?url=${encodeURIComponent(absolute)}${extraArgs}`;
       });
-      res.setHeader('content-type', contentType || 'application/vnd.apple.mpegurl');
-      res.setHeader('cache-control', 'no-store');
-      return res.send(lines.join('\n'));
+      return lines.join('\n');
+    } catch (e) {
+      console.error('[proxy-rewrite] Error rewriting M3U:', e);
+      return responseBuffer;
     }
-
-    pipeline(Readable.fromWeb(upstream.body), res, (err) => {
-      if (err) res.destroy(err);
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      return res.status(504).json({ error: 'Upstream timeout' });
-    }
-    return res.status(502).json({ error: 'Upstream fetch failed' });
-  } finally {
-    clearTimeout(timer);
-  }
-});
+  }),
+}));
 
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
