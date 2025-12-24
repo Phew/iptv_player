@@ -207,13 +207,23 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
 
   const userAgent = req.query.agent || DEFAULT_UA;
   const referer = req.query.referer || `${parsed.origin}/`;
-  const origin = req.query.origin || null; // default: omit Origin to avoid mismatched-host blocks
+  let origin = req.query.origin || null;
+  if (!origin && referer) {
+    try {
+      origin = new URL(referer).origin;
+    } catch (_e) {
+      origin = null;
+    }
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
+  const isManifestLike = isProbablyManifest('', parsed.pathname);
   const headers = {
     'User-Agent': userAgent,
-    Accept: req.get('accept') || '*/*',
+    Accept: isManifestLike
+      ? 'application/vnd.apple.mpegurl,application/x-mpegurl;q=0.9,*/*;q=0.5'
+      : (req.get('accept') || '*/*'),
     'Accept-Language': req.get('accept-language') || 'en-US,en;q=0.9',
     Referer: referer,
     ...(origin ? { Origin: origin } : {}),

@@ -33,8 +33,12 @@ const parseM3U = (content = '') => {
         if (opt.toLowerCase().startsWith('http-user-agent=')) {
           userAgent = opt.substring('http-user-agent='.length).trim();
         }
-        if (opt.toLowerCase().startsWith('http-referrer=')) {
+        const optLc = opt.toLowerCase();
+        if (optLc.startsWith('http-referrer=')) {
           referer = opt.substring('http-referrer='.length).trim();
+        }
+        if (optLc.startsWith('http-referer=')) {
+          referer = opt.substring('http-referer='.length).trim();
         }
       }
       j += 1;
