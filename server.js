@@ -178,22 +178,21 @@ app.use('/api/proxy', requireAuth, createProxyMiddleware({
     proxyReq.setHeader('Accept', '*/*');
     proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.9');
     
+    // Some providers (like Turbobunny) block requests if they don't have this header
+    // or if the Referer doesn't match the Origin exactly.
+    // Try removing Origin entirely if Referer is set, or setting it to null to avoid CORS preflight issues
+    // Actually, many streams fail if Origin is present but doesn't match the stream host.
+    // Let's try removing Origin by default unless explicitly provided.
+    proxyReq.removeHeader('Origin');
+
     // Explicit referer/origin override
     if (req.query.referer) {
       proxyReq.setHeader('Referer', req.query.referer);
-      // Also set Origin to match Referer for strict CORS checks if not explicitly provided
-      if (!req.query.origin) {
-        try {
-          const refUrl = new URL(req.query.referer);
-          proxyReq.setHeader('Origin', `${refUrl.protocol}//${refUrl.host}`);
-        } catch (e) {}
-      }
     } else {
       // Default to target origin if no specific referer provided
       try {
         const url = new URL(req.query.url);
         proxyReq.setHeader('Referer', `${url.protocol}//${url.host}/`);
-        proxyReq.setHeader('Origin', `${url.protocol}//${url.host}`);
       } catch (e) {}
     }
 
