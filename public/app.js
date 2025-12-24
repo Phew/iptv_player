@@ -47,7 +47,8 @@ const buildCandidates = (url) => {
       list.push({ url: upgraded, proxy: false }); // direct HTTPS preferred
       list.push({ url: upgraded, proxy: true });  // proxied fallback
     } else {
-      // http -> prefer proxied https, then proxied http
+      // http -> try upgraded direct first (if allowed by browser), then proxied
+      list.push({ url: upgraded, proxy: false });
       list.push({ url: upgraded, proxy: true });
       if (upgraded !== v) list.push({ url: v, proxy: true });
     }
