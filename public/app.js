@@ -37,20 +37,27 @@ const buildCandidates = (url) => {
     variants.push(`${clean}/index.m3u8`);
   }
 
-  // Prefer direct HTTPS first, then proxied (some providers dislike proxy headers)
   const list = [];
   variants.forEach((v) => {
-    const isHttp = v.toLowerCase().startsWith('http://');
-    const upgraded = isHttp ? v.replace(/^http:/i, 'https:') : v;
+    try {
+      const parsed = new URL(v.replace(/^\s+/, ''));
+      const isHttp = parsed.protocol === 'http:';
+      const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(parsed.hostname || '');
+      const upgraded = isHttp ? v.replace(/^http:/i, 'https:') : v;
 
-    if (!isHttp) {
-      list.push({ url: upgraded, proxy: false }); // direct HTTPS preferred
-      list.push({ url: upgraded, proxy: true });  // proxied fallback
-    } else {
-      // http -> try upgraded direct first (if allowed by browser), then proxied
+      // If host is IP or original is http, avoid direct mixed-content; prefer proxied upgraded HTTPS, then proxied original.
+      if (isHttp || isIp) {
+        list.push({ url: upgraded, proxy: true });
+        if (upgraded !== v) list.push({ url: v, proxy: true });
+        return;
+      }
+
+      // HTTPS host: prefer direct, then proxied fallback
       list.push({ url: upgraded, proxy: false });
       list.push({ url: upgraded, proxy: true });
-      if (upgraded !== v) list.push({ url: v, proxy: true });
+    } catch (_e) {
+      // Fallback: keep original proxied
+      list.push({ url: v, proxy: true });
     }
   });
 
@@ -80,13 +87,17 @@ const toggle = (el, show) => {
   el.classList[show ? 'remove' : 'add']('hidden');
 };
 
+let stopWatchInFlight = false;
 const stopWatch = async () => {
   if (state.watchTimer) {
     clearInterval(state.watchTimer);
     state.watchTimer = null;
   }
+  if (stopWatchInFlight) return;
+  stopWatchInFlight = true;
   dlog('watch: stop');
   await fetchJson('/api/watch/stop', { method: 'POST' }).catch(() => {});
+  stopWatchInFlight = false;
 };
 
 const startWatch = (playlistId, channelName = '') => {
