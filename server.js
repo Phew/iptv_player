@@ -170,6 +170,9 @@ app.use('/api/proxy', requireAuth, createProxyMiddleware({
     proxyReq.setHeader('Accept', '*/*');
     proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.9');
     
+    // Some servers block connection: keep-alive from proxies, try close or omit
+    // proxyReq.setHeader('Connection', 'keep-alive');
+    
     // Explicit referer/origin override
     if (req.query.referer) {
       proxyReq.setHeader('Referer', req.query.referer);
