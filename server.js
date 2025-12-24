@@ -207,7 +207,19 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
 
   const userAgent = req.query.agent || DEFAULT_UA;
   const referer = req.query.referer || `${parsed.origin}/`;
-  const origin = req.query.origin || null; // only send if explicitly provided
+  let origin = null;
+  const originParam = req.query.origin;
+  if (originParam === 'omit' || originParam === 'none') {
+    origin = null;
+  } else if (originParam) {
+    origin = originParam;
+  } else if (referer) {
+    try {
+      origin = new URL(referer).origin;
+    } catch (_e) {
+      origin = null;
+    }
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
