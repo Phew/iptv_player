@@ -165,12 +165,12 @@ const buildProxyUrl = (targetUrl, { referer, origin, agent } = {}) => {
 const rewriteManifest = (body, targetUrl, { referer, origin, agent } = {}) => {
   const base = new URL(targetUrl);
   const safeReferer = referer || `${base.origin}/`;
-  const safeOrigin = origin || base.origin;
+  const safeOrigin = origin || '';
   return body.split(/\r?\n/).map((line) => {
     if (!line || line.startsWith('#')) return line;
     try {
       const absolute = new URL(line, base).toString();
-      return buildProxyUrl(absolute, { referer: safeReferer, origin: safeOrigin, agent });
+      return buildProxyUrl(absolute, { referer: safeReferer, origin: safeOrigin || undefined, agent });
     } catch (err) {
       return line;
     }
@@ -207,18 +207,16 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
 
   const userAgent = req.query.agent || DEFAULT_UA;
   const referer = req.query.referer || `${parsed.origin}/`;
-  let origin = null;
   const originParam = req.query.origin;
+  const includeOrigin = Object.prototype.hasOwnProperty.call(req.query, 'origin');
+  let origin = null;
   if (originParam === 'omit' || originParam === 'none') {
     origin = null;
   } else if (originParam) {
     origin = originParam;
-  } else if (referer) {
-    try {
-      origin = new URL(referer).origin;
-    } catch (_e) {
-      origin = null;
-    }
+  } else if (includeOrigin && !originParam) {
+    // explicit empty origin should stay null
+    origin = null;
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
@@ -251,7 +249,11 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
 
     if (isProbablyManifest(contentType, parsed.pathname)) {
       const manifest = await readBodyWithLimit(upstream.body, MAX_MANIFEST_BYTES);
-      const rewritten = rewriteManifest(manifest, upstream.url || parsed.toString(), { referer, origin, agent: req.query.agent });
+      const rewritten = rewriteManifest(manifest, upstream.url || parsed.toString(), {
+        referer,
+        origin: includeOrigin ? origin : null,
+        agent: req.query.agent,
+      });
       res.status(statusCode);
       res.setHeader('Content-Type', contentType || 'application/vnd.apple.mpegurl');
       return res.send(rewritten);
