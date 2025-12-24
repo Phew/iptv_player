@@ -14,6 +14,11 @@ const state = {
 const els = {};
 
 const qs = (id) => document.getElementById(id);
+const DEBUG_LOGGING = true;
+const dlog = (...args) => {
+  if (!DEBUG_LOGGING) return;
+  try { console.log('[iptv]', ...args); } catch (_e) {}
+};
 const fmtDate = (value) => new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric' });
 const proxyUrl = (url) => `/api/proxy?url=${encodeURIComponent(url)}`;
 const rewriteUrl = (url) => {
@@ -79,12 +84,14 @@ const stopWatch = async () => {
     clearInterval(state.watchTimer);
     state.watchTimer = null;
   }
+  dlog('watch: stop');
   await fetchJson('/api/watch/stop', { method: 'POST' }).catch(() => {});
 };
 
 const startWatch = (playlistId, channelName = '') => {
   if (!playlistId) return;
   stopWatch();
+  dlog('watch: start', { playlistId, channelName });
   const send = async () => {
     try {
       const data = await fetchJson('/api/watch/ping', {
@@ -106,6 +113,8 @@ const startWatch = (playlistId, channelName = '') => {
 };
 
 const fetchJson = async (url, options = {}) => {
+  const method = options.method || 'GET';
+  dlog('fetchJson: request', { url, method });
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -115,6 +124,7 @@ const fetchJson = async (url, options = {}) => {
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({}));
+  dlog('fetchJson: response', { url, method, status: res.status, ok: res.ok });
   if (!res.ok) {
     const error = data.error || 'Request failed';
     throw new Error(error);
@@ -124,6 +134,7 @@ const fetchJson = async (url, options = {}) => {
 
 const handleLoginSuccess = (user) => {
   state.user = user;
+  dlog('auth: login success', { user });
   if (state.user) sessionStorage.setItem('user', JSON.stringify(state.user));
   updateUserUI();
   setStatus(qs('auth-status'), '');
@@ -224,6 +235,7 @@ const renderChannels = (filter = '') => {
 const selectPlaylist = async (id) => {
   if (!id) return;
   state.selectedPlaylistId = id;
+  dlog('playlist: select', { id });
   renderPlaylists();
   setStatus(qs('auth-status'), 'Loading channels…');
   try {
@@ -239,6 +251,7 @@ const selectPlaylist = async (id) => {
 
 const destroyPlayer = () => {
   const video = qs('video');
+  dlog('player: destroy');
   video.onerror = null;
   stopWatch();
   if (state.hls) {
@@ -252,6 +265,7 @@ const destroyPlayer = () => {
 const playChannel = (channel) => {
   const video = qs('video');
   destroyPlayer();
+  dlog('player: playChannel invoked', { channel });
 
   setStatus(qs('player-status'), 'Loading stream…');
 
@@ -261,6 +275,7 @@ const playChannel = (channel) => {
 
   const statusEl = qs('player-status');
   const candidates = buildCandidates(channel.url);
+  dlog('player: candidates', candidates);
   let attempt = 0;
   let attemptTimer = null;
   let bufferingTimer = null;
@@ -291,6 +306,7 @@ const playChannel = (channel) => {
     clearAttemptTimer();
     clearBufferingTimer();
     if (reason) setStatus(statusEl, reason, true);
+    if (reason) dlog('player: startNext', { reason, attempt, total: candidates.length });
     attempt += 1;
     if (attempt >= candidates.length) {
       setStatus(statusEl, 'All sources failed.', true);
@@ -309,6 +325,13 @@ const playChannel = (channel) => {
     const proxied = candidate.proxy ? rewriteUrl(source) : source;
     const isHls = source.toLowerCase().includes('.m3u8');
     const useHls = !!(window.Hls && window.Hls.isSupported());
+    dlog('player: startAttempt', {
+      attempt: attempt + 1,
+      total: candidates.length,
+      source,
+      proxied: candidate.proxy,
+      usingHlsJs: isHls && useHls,
+    });
     const maxNetworkRecoveries = 2;
     const maxMediaRecoveries = 2;
     let networkRecoveries = 0;
@@ -325,6 +348,7 @@ const playChannel = (channel) => {
       clearAttemptTimer();
       video.play().catch((err) => {
         setStatus(statusEl, `Playback error: ${err.message}`, true);
+        dlog('player: video.play error', err?.message);
       });
       video.oncanplay = null;
     };
@@ -368,16 +392,19 @@ const playChannel = (channel) => {
       state.hls.attachMedia(video);
       state.hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         state.hls.loadSource(proxied);
+        dlog('hls: media attached, loading source', proxied);
       });
       state.hls.on(Hls.Events.LEVEL_LOADED, () => {
         clearAttemptTimer();
         video.play().catch(() => {});
+        dlog('hls: level loaded');
       });
       state.hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data) return;
         if (failedThisAttempt) return;
         const code = data?.response?.code ? ` (HTTP ${data.response.code})` : '';
         const codeNum = data?.response?.code || 0;
+        dlog('hls: error', { type: data.type, details: data.details, code: codeNum, fatal: data.fatal });
 
         // Treat common dead-source codes as immediate failures (even if non-fatal)
         if ([404, 403, 410, 429].includes(codeNum)) {
@@ -421,11 +448,13 @@ const playChannel = (channel) => {
       state.hls.on(Hls.Events.BUFFER_STALLED, () => {
         markBuffering('Buffering… retrying…');
         state.hls.startLoad();
+    dlog('hls: buffer stalled');
       });
     } else {
       video.src = proxied;
       video.onerror = () => {
         startNext('Playback failed. Trying next source…');
+    dlog('player: video tag error, trying next source');
       };
       video.load();
       video.play().catch(() => {});
