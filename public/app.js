@@ -36,12 +36,14 @@ const buildCandidates = (channel) => {
   const url = channel.url;
   const clean = (url || '').trim();
   if (!clean) return [];
-  const variants = [clean];
+  const variants = [];
   const noExt = !/\.[a-z0-9]+(\?|$)/i.test(clean);
+  // Prefer explicit HLS suffixes first for faster success
   if (noExt) {
     variants.push(`${clean}.m3u8`);
     variants.push(`${clean}/index.m3u8`);
   }
+  variants.push(clean);
 
   const list = [];
   variants.forEach((v) => {
@@ -317,7 +319,7 @@ const playChannel = (channel) => {
     setStatus(statusEl, message);
     bufferingTimer = setTimeout(() => {
       startNext('Buffering timeout, trying next source…');
-    }, 30000); // Increased from 15s to 30s
+    }, 12000);
   };
 
   const startNext = (reason) => {
@@ -361,7 +363,7 @@ const playChannel = (channel) => {
     clearAttemptTimer();
     attemptTimer = setTimeout(() => {
       startNext('Timeout, trying next source…');
-    }, 30000); // Increased from 15s to 30s
+    }, 12000);
 
     video.oncanplay = () => {
       setStatus(statusEl, '');
@@ -411,6 +413,10 @@ const playChannel = (channel) => {
         manifestLoadingMaxRetry: 1,
         lowLatencyMode: false,
         startLevel: -1,
+        // Faster failover/timeouts
+        manifestLoadingTimeOut: 8000,
+        levelLoadingTimeOut: 8000,
+        fragLoadingTimeOut: 8000,
       };
       state.hls = new Hls(hlsConfig);
       state.hls.attachMedia(video);

@@ -64,7 +64,8 @@ const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
 const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
 const AUTO_IMPORT_CLEAR = String(process.env.AUTO_IMPORT_CLEAR || '').toLowerCase() === 'true';
 const SITE_NAME = process.env.SITE_NAME || db.getSetting('siteName') || 'theater.cat';
-const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 40000;
+// Keep proxy snappy: fail and rotate quickly if upstream is slow
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 15000;
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024; // 2MB cap to avoid huge manifests
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
