@@ -32,23 +32,19 @@ const buildCandidates = (url) => {
     variants.push(`${clean}/index.m3u8`);
   }
 
-  // Prefer proxied/HTTPS versions to avoid mixed content, adblock, or bad certs
+  // Prefer direct HTTPS first, then proxied (some providers dislike proxy headers)
   const list = [];
   variants.forEach((v) => {
     const isHttp = v.toLowerCase().startsWith('http://');
     const upgraded = isHttp ? v.replace(/^http:/i, 'https:') : v;
 
-    // Always try proxied (uses our HTTPS host)
-    list.push({ url: upgraded, proxy: true });
-
-    // If original was http, also allow proxied http as a fallback
-    if (isHttp && upgraded !== v) {
-      list.push({ url: v, proxy: true });
-    }
-
-    // Only allow direct fetch when already HTTPS
     if (!isHttp) {
-      list.push({ url: upgraded, proxy: false });
+      list.push({ url: upgraded, proxy: false }); // direct HTTPS preferred
+      list.push({ url: upgraded, proxy: true });  // proxied fallback
+    } else {
+      // http -> prefer proxied https, then proxied http
+      list.push({ url: upgraded, proxy: true });
+      if (upgraded !== v) list.push({ url: v, proxy: true });
     }
   });
 
