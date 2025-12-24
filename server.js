@@ -151,7 +151,7 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
     const origin = req.query.origin || targetUrl.origin;
     
     const headers = {
-      'user-agent': 'VLC/3.0.20 LibVLC/3.0.20',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       accept: '*/*',
       referer,
       origin,
