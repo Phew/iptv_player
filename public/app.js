@@ -353,7 +353,7 @@ const playChannel = (channel) => {
     clearAttemptTimer();
     attemptTimer = setTimeout(() => {
       startNext('Timeout, trying next source…');
-    }, 8000);
+    }, 15000);
 
     video.oncanplay = () => {
       setStatus(statusEl, '');
@@ -388,8 +388,9 @@ const playChannel = (channel) => {
           super.load(updated, config, callbacks);
         }
       }
-      // Always use proxy loader so nested playlist/segment requests avoid mixed content/cert issues
-      const loaderClass = ProxyLoader;
+      // Use proxy loader only when candidate is marked proxied to avoid mixed-content/cert issues.
+      // Allow direct loader for safe HTTPS hosts that shouldn't be proxied (some reject proxy UA/headers).
+      const loaderClass = candidate.proxy ? ProxyLoader : Hls.DefaultConfig.loader;
       const hlsConfig = {
         ...Hls.DefaultConfig,
         loader: loaderClass,
@@ -429,6 +430,11 @@ const playChannel = (channel) => {
           return;
         }
 
+        if (data.details === 'manifestParsingError') {
+          failedThisAttempt = true;
+          startNext('Manifest could not be parsed. Trying next source…');
+          return;
+        }
         if (data.fatal) {
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries < maxNetworkRecoveries) {
             networkRecoveries += 1;
