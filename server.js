@@ -151,12 +151,18 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
     const origin = req.query.origin || targetUrl.origin;
     
     const headers = {
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      accept: '*/*',
-      referer,
-      origin,
-      'accept-language': 'en-US,en;q=0.9',
-      ...(req.headers.range ? { range: req.headers.range } : {}),
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Referer': referer,
+      'Origin': origin,
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Connection': 'keep-alive',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'Pragma': 'no-cache',
+      'Cache-Control': 'no-cache',
+      ...(req.headers.range ? { Range: req.headers.range } : {}),
     };
 
     // Forward cookie if present (important for session-based streams)
