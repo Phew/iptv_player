@@ -64,6 +64,8 @@ const AUTO_IMPORT_PREFIX = process.env.AUTO_IMPORT_PREFIX || '';
 const AUTO_IMPORT_HOURS = Number(process.env.AUTO_IMPORT_HOURS || 12);
 const AUTO_IMPORT_CLEAR = String(process.env.AUTO_IMPORT_CLEAR || '').toLowerCase() === 'true';
 const SITE_NAME = process.env.SITE_NAME || db.getSetting('siteName') || 'theater.cat';
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS) || 8000;
+const MAX_MANIFEST_BYTES = 2 * 1024 * 1024; // 2MB cap to avoid huge manifests
 // Behind HTTPS/load-balancer we need the forwarded proto to set secure cookies
 app.set('trust proxy', trustProxy);
 
@@ -141,11 +143,14 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid url' });
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
   try {
     const targetUrl = new URL(target);
     const referer = `${targetUrl.origin}/`;
     const upstream = await fetch(target, {
       redirect: 'follow',
+      signal: controller.signal,
       headers: {
         'user-agent': 'VLC/3.0.20 LibVLC/3.0.20',
         accept: '*/*',
@@ -158,7 +163,7 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
     });
 
     res.status(upstream.status);
-    const passHeaders = ['content-type', 'content-length', 'accept-ranges', 'cache-control'];
+    const passHeaders = ['content-type', 'content-length', 'accept-ranges', 'cache-control', 'content-range'];
     passHeaders.forEach((h) => {
       const v = upstream.headers.get(h);
       if (v) res.setHeader(h, v);
@@ -171,7 +176,12 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
 
     if (isM3U) {
       // Buffer small manifest, rewrite relative segment URLs to proxied absolute URLs
-      const buf = await upstream.text();
+      const manifestBuf = Buffer.from(await upstream.arrayBuffer());
+      if (manifestBuf.length > MAX_MANIFEST_BYTES) {
+        clearTimeout(timer);
+        return res.status(413).json({ error: 'Manifest too large' });
+      }
+      const buf = manifestBuf.toString('utf8');
       const lines = buf.split(/\r?\n/).map((line) => {
         if (!line || line.startsWith('#')) return line;
         // Absolute URL, leave
@@ -193,7 +203,12 @@ app.get('/api/proxy', requireAuth, async (req, res) => {
       if (err) res.destroy(err);
     });
   } catch (err) {
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ error: 'Upstream timeout' });
+    }
     return res.status(502).json({ error: 'Upstream fetch failed' });
+  } finally {
+    clearTimeout(timer);
   }
 });
 
@@ -249,10 +264,9 @@ app.get('/api/auth/me', (req, res) => {
 app.get('/api/playlists', requireAuth, (_req, res) => {
   const playlists = db.listPlaylists();
   const counts = watcherCounts();
-  const total = totalWatchers();
   const withCounts = playlists.map((p) => ({
     ...p,
-    viewerCount: total,
+    viewerCount: counts[p.id] || 0,
     viewerLimit: MAX_CONNECTIONS,
   }));
   res.json({ playlists: withCounts });

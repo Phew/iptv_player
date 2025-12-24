@@ -52,9 +52,9 @@ const buildCandidates = (url) => {
         return;
       }
 
-      // HTTPS host: prefer direct, then proxied fallback
-      list.push({ url: upgraded, proxy: false });
+      // HTTPS host: prefer proxied first (avoids mixed content / bad certs), then direct fallback
       list.push({ url: upgraded, proxy: true });
+      list.push({ url: upgraded, proxy: false });
     } catch (_e) {
       // Fallback: keep original proxied
       list.push({ url: v, proxy: true });
@@ -388,7 +388,8 @@ const playChannel = (channel) => {
           super.load(updated, config, callbacks);
         }
       }
-      const loaderClass = candidate.proxy ? ProxyLoader : Hls.DefaultConfig.loader;
+      // Always use proxy loader so nested playlist/segment requests avoid mixed content/cert issues
+      const loaderClass = ProxyLoader;
       const hlsConfig = {
         ...Hls.DefaultConfig,
         loader: loaderClass,
